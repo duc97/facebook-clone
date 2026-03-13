@@ -1,0 +1,77 @@
+[project]
+name = "facebook-clone"
+version = "0.1.0"
+description = "A Facebook clone built with FastAPI, Strawberry GraphQL, and SQLAlchemy"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi[standard]>=0.109",
+    "strawberry-graphql[fastapi]>=0.220",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "redis[hiredis]>=5.0",
+    "pydantic-settings>=2.1",
+    "pyjwt[crypto]>=2.8",
+    "bcrypt>=4.1",
+    "python-multipart>=0.0.6",
+    "aioboto3>=12.0",
+    "Pillow>=10.0",
+    "uvicorn[standard]>=0.27",
+    "prometheus-client>=0.19",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "httpx>=0.25",
+    "testcontainers[postgres,redis]>=3.7",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "factory-boy>=3.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fb"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests (require external services)",
+    "e2e: End-to-end tests",
+]
+
+[tool.coverage.run]
+source = ["src/fb"]
+omit = [
+    # Standalone query classes duplicated by schema.py (unused dead code)
+    "src/fb/presentation/graphql/queries/auth.py",
+    "src/fb/presentation/graphql/queries/friend.py",
+    "src/fb/presentation/graphql/queries/search.py",
+    "src/fb/presentation/graphql/queries/feed.py",
+    "src/fb/presentation/graphql/queries/post.py",
+    "src/fb/presentation/graphql/queries/interaction.py",
+    "src/fb/presentation/graphql/queries/profile.py",
+    # Infrastructure repos require real DB — tested in integration tests
+    "src/fb/infrastructure/repositories/*",
+]

@@ -1,0 +1,84 @@
+{
+  "__inputs": [],
+  "__requires": [{"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0"}],
+  "annotations": {"list": []},
+  "description": "Facebook Clone Backend — API & Infrastructure",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (RPS)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (endpoint)",
+          "legendFormat": "{{ endpoint }}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "P99 Latency (ms)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) * 1000",
+          "legendFormat": "P99 {{ endpoint }}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Error Rate %",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "100 * rate(http_requests_total{status_code=~\"5..\"}[5m]) / rate(http_requests_total[5m])",
+          "legendFormat": "Error %"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Active WebSocket Connections",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+      "targets": [{"expr": "websocket_connections_active", "legendFormat": "Connections"}]
+    },
+    {
+      "id": 5,
+      "title": "Cache Hit Rate",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m]))",
+          "legendFormat": "Hit Rate"
+        }
+      ],
+      "options": {"reduceOptions": {"calcs": ["last"]}, "orientation": "auto", "showThresholdLabels": false},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "yellow", "value": 0.5}, {"color": "green", "value": 0.8}]}}}
+    },
+    {
+      "id": 6,
+      "title": "Pod Count",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+      "targets": [{"expr": "kube_deployment_status_available_replicas{namespace=\"production\",deployment=~\"facebook-clone.*\"}", "legendFormat": "Available Pods"}]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["facebook-clone", "api"],
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Facebook Clone — API Dashboard",
+  "uid": "facebook-clone-api",
+  "version": 1
+}

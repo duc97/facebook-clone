@@ -1,0 +1,53 @@
+---
+# Active service — points to current slot (blue/green)
+apiVersion: v1
+kind: Service
+metadata:
+  name: facebook-clone
+  namespace: production
+  labels:
+    app: facebook-clone
+spec:
+  type: ClusterIP
+  selector:
+    app: facebook-clone
+    slot: blue   # Updated by blue-green script
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+---
+# Blue service (permanent)
+apiVersion: v1
+kind: Service
+metadata:
+  name: facebook-clone-blue
+  namespace: production
+  labels:
+    app: facebook-clone
+spec:
+  type: ClusterIP
+  selector:
+    app: facebook-clone
+    slot: blue
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+# Green service (permanent)
+apiVersion: v1
+kind: Service
+metadata:
+  name: facebook-clone-green
+  namespace: production
+  labels:
+    app: facebook-clone
+spec:
+  type: ClusterIP
+  selector:
+    app: facebook-clone
+    slot: green
+  ports:
+    - port: 80
+      targetPort: 8000

@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: facebook-clone-blue
+  namespace: production
+  labels:
+    app: facebook-clone
+    slot: blue
+    version: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: facebook-clone
+      slot: blue
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # Zero-downtime within slot
+  template:
+    metadata:
+      labels:
+        app: facebook-clone
+        slot: blue
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: facebook-clone
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Anti-affinity: spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: facebook-clone
+                topologyKey: kubernetes.io/hostname
+
+      # Tolerate spot/preemptible nodes
+      tolerations:
+        - key: "node.kubernetes.io/spot"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      terminationGracePeriodSeconds: 60
+
+      initContainers:
+        - name: run-migrations
+          image: ghcr.io/your-org/facebook-clone:latest
+          command: ["sh", "-c", "alembic upgrade head"]
+          envFrom:
+            - configMapRef:
+                name: facebook-clone-config
+            - secretRef:
+                name: facebook-clone-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+
+      containers:
+        - name: app
+          image: ghcr.io/your-org/facebook-clone:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: facebook-clone-config
+            - secretRef:
+                name: facebook-clone-secrets
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+
+          # Startup probe: allow 2 minutes for startup
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            failureThreshold: 12
+            periodSeconds: 10
+            timeoutSeconds: 5
+
+          # Readiness probe: DB + Redis check
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 5
+
+          # Liveness probe: simple health check
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]  # drain connections
+
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+
+      volumes:
+        - name: uploads
+          emptyDir: {}
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: facebook-clone

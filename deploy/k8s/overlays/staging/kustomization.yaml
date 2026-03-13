@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: staging
+
+resources:
+  - ../../base
+  - ../../app/deployment-blue.yaml
+  - ../../app/service.yaml
+  - ../../app/ingress.yaml
+
+patches:
+  - target:
+      kind: Deployment
+      name: facebook-clone-blue
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: ConfigMap
+      name: facebook-clone-config
+    patch: |-
+      - op: replace
+        path: /data/DEBUG
+        value: "true"
+
+images:
+  - name: ghcr.io/your-org/facebook-clone
+    newTag: staging

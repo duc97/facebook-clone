@@ -1,0 +1,49 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: "YOUR_SLACK_WEBHOOK_URL"   # Override via env
+
+route:
+  group_by: ["alertname", "cluster", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: default
+
+  routes:
+    - matchers:
+        - severity = critical
+      receiver: pagerduty-critical
+      repeat_interval: 1h
+
+    - matchers:
+        - severity = warning
+      receiver: slack-warnings
+      repeat_interval: 4h
+
+receivers:
+  - name: default
+    slack_configs:
+      - channel: "#alerts"
+        title: "{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}"
+        text: "{{ range .Alerts }}{{ .Annotations.description }}\nRunbook: {{ .Annotations.runbook }}{{ end }}"
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+  - name: pagerduty-critical
+    pagerduty_configs:
+      - routing_key: "YOUR_PAGERDUTY_KEY"
+        description: "{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}"
+    slack_configs:
+      - channel: "#incidents"
+        title: "🚨 CRITICAL: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}"
+
+  - name: slack-warnings
+    slack_configs:
+      - channel: "#warnings"
+        title: "⚠️ WARNING: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}"
+
+inhibit_rules:
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: ["alertname", "cluster"]

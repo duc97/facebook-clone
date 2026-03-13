@@ -1,0 +1,163 @@
+name: CD — Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+      image_tag:
+        description: Image tag to deploy (default: latest)
+        required: false
+        default: latest
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  prevent-parallel-deploys: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ── Deploy to Staging ────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy → Staging
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.facebook-clone.example.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.image_tag || 'sha-' }}$(git rev-parse --short HEAD)"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy blue/green — staging
+        run: |
+          chmod +x deploy/scripts/blue-green-deploy.sh
+          deploy/scripts/blue-green-deploy.sh \
+            staging \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}" \
+            "facebook-clone"
+
+      - name: Notify Slack — staging deployed
+        if: always()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} *Staging Deploy* — `${{ steps.tag.outputs.tag }}`\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  # ── Deploy to Production ─────────────────────────────────────────────
+  deploy-production:
+    name: Deploy → Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://facebook-clone.example.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy blue/green — production
+        id: deploy
+        run: |
+          chmod +x deploy/scripts/blue-green-deploy.sh
+          deploy/scripts/blue-green-deploy.sh \
+            production \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}" \
+            "facebook-clone"
+
+      - name: Healthcheck post-deploy
+        id: healthcheck
+        run: |
+          echo "Waiting 30s for pods to stabilise..."
+          sleep 30
+          kubectl rollout status deployment/facebook-clone-production -n production --timeout=120s
+
+      - name: Automatic rollback on failure
+        if: failure() && steps.healthcheck.outcome == 'failure'
+        run: |
+          echo "::error::Healthcheck failed — initiating rollback"
+          kubectl rollout undo deployment/facebook-clone-production -n production
+          kubectl rollout status deployment/facebook-clone-production -n production --timeout=60s
+
+      - name: Notify Slack — production deployed
+        if: always()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ job.status == 'success' && ':white_check_mark:' || ':x:' }} *Production Deploy* ${{ job.status }}\n*Image:* `${{ github.event.inputs.image_tag }}`\n*Commit:* `${{ github.sha }}`\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_PROD_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  # ── Tag Release ───────────────────────────────────────────────────────
+  tag-release:
+    name: Tag Semver Release
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: success()
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release tag
+        run: |
+          VERSION="${{ github.event.inputs.image_tag }}"
+          git tag -a "${VERSION}" -m "Release ${VERSION}" || echo "Tag already exists"
+          git push origin "${VERSION}" || echo "Tag push skipped"

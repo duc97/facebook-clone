@@ -1,0 +1,70 @@
+groups:
+  - name: facebook-clone.alerts
+    interval: 30s
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{status_code=~"5.."}[5m])
+          / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "High HTTP error rate ({{ $value | humanizePercentage }})"
+          description: "Error rate > 5% for 2 minutes on {{ $labels.app }}"
+          runbook: "https://wiki.example.com/runbooks/high-error-rate"
+
+      # High latency
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99,
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 latency > 2s"
+          description: "99th percentile latency is {{ $value }}s"
+
+      # Pod restart
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total{namespace="production"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod crash looping: {{ $labels.pod }}"
+
+      # Low replica count
+      - alert: DeploymentReplicasMismatch
+        expr: |
+          kube_deployment_spec_replicas{namespace="production"}
+          != kube_deployment_status_available_replicas{namespace="production"}
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deployment replicas mismatch: {{ $labels.deployment }}"
+
+      # Redis memory
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory > 85%"
+
+      # DB connection pool saturation
+      - alert: DBPoolSaturation
+        expr: |
+          db_pool_checked_out / db_pool_size > 0.8
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB connection pool > 80% utilized"

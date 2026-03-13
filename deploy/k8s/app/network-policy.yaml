@@ -1,0 +1,67 @@
+---
+# Deny all ingress by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow ingress only from nginx ingress controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: facebook-clone
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# Allow egress to postgres and redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-db-egress
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: facebook-clone
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0   # Allow all egress (restrict further if known IPs)
+      ports:
+        - protocol: TCP
+          port: 5432     # PostgreSQL
+        - protocol: TCP
+          port: 6379     # Redis
+        - protocol: TCP
+          port: 443      # HTTPS (S3, external APIs)
+        - protocol: TCP
+          port: 53       # DNS
+        - protocol: UDP
+          port: 53
