@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1.7
 # ──────────────────────────────────────────────────────────────────────────────
-# Stage 1: base — shared OS setup
+# Multi-stage build: dev uses python:3.12-slim; prod uses Distroless (~50 MB,
+# no shell, no apt, minimal CVE surface). Compatible with Docker and Podman.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Stage 1: base — shared OS setup (also source of runtime .so libs for prod)
 # ──────────────────────────────────────────────────────────────────────────────
 FROM python:3.12-slim AS base
 
@@ -64,36 +68,43 @@ EXPOSE 8000
 CMD ["uvicorn", "fb.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Stage 4: production — minimal, non-root, hardened
+# Stage 4: production — Distroless, minimal attack surface, non-root (UID 65532)
+#
+# gcr.io/distroless/python3-debian12:nonroot has:
+#   • No shell, no apt, no pip, no curl → ~50 MB vs ~130 MB for python:3.12-slim
+#   • Built-in "nonroot" user (UID/GID 65532)
+#   • No useradd/groupadd/mkdir → user files must be owned at build time via
+#     COPY --chown, and runtime libs must be copied from the base stage
 # ──────────────────────────────────────────────────────────────────────────────
-FROM base AS production
+FROM gcr.io/distroless/python3-debian12:nonroot AS production
 
-# Create non-root user before copying anything
-RUN groupadd --gid 1001 app && \
-    useradd --uid 1001 --gid app --shell /sbin/nologin --no-create-home app
-
-# Copy installed packages from builder
+# Copy installed Python packages from builder
 COPY --from=builder /install /usr/local
+
+# Copy PostgreSQL client shared libs from base (asyncpg needs libpq at runtime).
+# Distroless ships no apt, so we pull the .so files from the slim base stage.
+COPY --from=base /usr/lib/x86_64-linux-gnu/libpq.so.5 /usr/lib/x86_64-linux-gnu/libpq.so.5
+COPY --from=base /usr/lib/x86_64-linux-gnu/libssl.so.3 /usr/lib/x86_64-linux-gnu/libssl.so.3
+COPY --from=base /usr/lib/x86_64-linux-gnu/libcrypto.so.3 /usr/lib/x86_64-linux-gnu/libcrypto.so.3
+
+# Copy only what runtime needs (not tests, not docs).
+# --chown targets the Distroless built-in nonroot user (UID/GID 65532).
+COPY --chown=65532:65532 src/ /app/src/
+COPY --chown=65532:65532 migrations/ /app/migrations/
+COPY --chown=65532:65532 alembic.ini /app/alembic.ini
 
 WORKDIR /app
 
-# Copy only what runtime needs (not tests, not docs)
-COPY --chown=app:app src/ src/
-COPY --chown=app:app migrations/ migrations/
-COPY --chown=app:app alembic.ini alembic.ini
-
-# Create uploads dir (for local storage backend)
-RUN mkdir -p uploads && chown app:app uploads
-
-USER app
+# NOTE: uploads dir is provided via a volume mount in compose (no mkdir in Distroless)
 
 EXPOSE 8000
 
-# HEALTHCHECK using curl to /health endpoint
+# Healthcheck: Python replaces curl — curl is not present in Distroless
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD ["python3", "-c", \
+         "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
 
-# Use exec form for proper signal handling
+# Use exec form for proper signal handling (no shell in Distroless anyway)
 CMD ["uvicorn", "fb.main:create_app", \
      "--factory", \
      "--host", "0.0.0.0", \

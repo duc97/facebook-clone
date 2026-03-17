@@ -1,4 +1,4 @@
-.PHONY: install dev test test-unit test-integration test-e2e lint format typecheck migrate migration docker-build docker-build-dev docker-up docker-up-build docker-down docker-logs docker-migrate docker-shell docker-staging docker-size coverage
+.PHONY: install dev test test-unit test-integration test-e2e lint format typecheck migrate migration docker-build docker-build-dev docker-up docker-up-build docker-down docker-logs docker-migrate docker-shell docker-staging docker-size podman-build podman-build-dev podman-up podman-up-build podman-down podman-logs podman-migrate podman-shell podman-size coverage
 
 install:
 	pip install -e ".[dev]"
@@ -66,6 +66,38 @@ docker-staging:
 # ── Image size check ──────────────────────────────────────────────────
 docker-size:
 	docker images facebook-clone:latest --format "Image size: {{.Size}}"
+
+# ── Podman (rootless, daemonless alternative to Docker) ───────────────
+# Requires: podman, podman-compose
+# Same compose file works for both runtimes — podman-compose reads docker-compose.yml
+
+podman-build:
+	podman build --target production -t facebook-clone:latest .
+
+podman-build-dev:
+	podman build --target development -t facebook-clone:dev .
+
+podman-up:
+	podman-compose up -d
+
+podman-up-build:
+	podman-compose up -d --build
+
+podman-down:
+	podman-compose down -v
+
+podman-logs:
+	podman-compose logs -f app
+
+podman-migrate:
+	podman-compose run --rm migrate
+
+podman-shell:
+	podman-compose exec app bash
+
+# Check final production image size (should be ~50-65 MB with Distroless)
+podman-size:
+	podman images facebook-clone:latest --format "Image size: {{.Size}}"
 
 coverage:
 	pytest --cov=src/fb --cov-report=term-missing --cov-report=html

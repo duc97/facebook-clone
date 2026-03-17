@@ -1,4 +1,8 @@
 # Local development stack — all services
+# Compatible with Docker and Podman (rootless).
+# Podman users: install podman-compose and use `podman-compose up -d`
+#   userns_mode: keep-id maps your host UID into the container so bind-mount
+#   volume permissions work correctly without chown workarounds.
 name: facebook-clone
 
 services:
@@ -32,6 +36,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    userns_mode: keep-id      # Podman rootless: map host UID into container
     restart: unless-stopped
 
   # ── PostgreSQL ────────────────────────────────────────────────────────
@@ -51,6 +56,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    userns_mode: keep-id      # Podman rootless: map host UID into container
     restart: unless-stopped
 
   # ── Redis ─────────────────────────────────────────────────────────────
@@ -66,6 +72,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    userns_mode: keep-id      # Podman rootless: map host UID into container
     restart: unless-stopped
 
   # ── MinIO (S3-compatible local storage) ──────────────────────────────
@@ -85,20 +92,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    userns_mode: keep-id      # Podman rootless: map host UID into container
     restart: unless-stopped
 
   # ── Migration runner (one-shot) ──────────────────────────────────────
+  # Uses the development target (has bash + alembic CLI) so that `sh -c` works.
+  # The production/Distroless stage has no shell; migrations run here instead.
   migrate:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: development
     command: ["sh", "-c", "alembic upgrade head"]
     environment:
       DATABASE_URL: postgresql+asyncpg://fb:fb_password@postgres:5432/facebook_clone
     depends_on:
       postgres:
         condition: service_healthy
+    userns_mode: keep-id      # Podman rootless: map host UID into container
     restart: "no"
 
 volumes:
