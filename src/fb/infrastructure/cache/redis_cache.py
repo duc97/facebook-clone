@@ -55,15 +55,51 @@ class RedisCache:
             logger.warning("Cache delete failed for key=%s", key, exc_info=True)
 
     async def delete_pattern(self, pattern: str) -> int:
-        """Delete all keys matching a glob pattern. Returns count deleted."""
+        """Delete all keys matching a glob pattern. Returns count deleted.
+
+        Uses SCAN (non-blocking) instead of KEYS to avoid blocking Redis.
+        Deletes in batches for efficiency.
+        """
         try:
-            keys = await self._redis.keys(pattern)
-            if keys:
-                return await self._redis.delete(*keys)
-            return 0
+            deleted = 0
+            cursor: int | bytes = 0
+            while True:
+                cursor, keys = await self._redis.scan(
+                    cursor=cursor, match=pattern, count=100
+                )
+                if keys:
+                    deleted += await self._redis.delete(*keys)
+                if not cursor:
+                    break
+            return deleted
         except Exception:
             logger.warning("Cache delete_pattern failed for pattern=%s", pattern, exc_info=True)
             return 0
+
+    async def mget(self, keys: list[str]) -> list[Any | None]:
+        """Batch-fetch multiple keys in a single MGET round trip.
+
+        Returns a list in the same order as ``keys``, with ``None`` for
+        misses or deserialization errors.  Falls back gracefully to an
+        all-None list on Redis errors so callers can warm from DB.
+        """
+        if not keys:
+            return []
+        try:
+            raws = await self._redis.mget(*keys)
+            results: list[Any | None] = []
+            for raw in raws:
+                if raw is None:
+                    results.append(None)
+                else:
+                    try:
+                        results.append(json.loads(raw))
+                    except json.JSONDecodeError:
+                        results.append(None)
+            return results
+        except Exception:
+            logger.warning("Cache mget failed for keys=%s", keys, exc_info=True)
+            return [None] * len(keys)
 
     async def get_or_set(
         self,

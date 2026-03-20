@@ -46,6 +46,9 @@ class ProfileMutation:
                 )
             )
 
+        # Invalidate cached profile so the updated data is served on next read.
+        await container.cache.invalidate_profile(ctx.current_user_id)  # type: ignore[arg-type]
+
         return _to_type(result)
 
     @strawberry.mutation
@@ -90,6 +93,9 @@ class ProfileMutation:
 
                 user = await user_repo.find_by_id(entity_id)
                 display_name = user.display_name if user else ""
+
+                # Invalidate cached profile — avatar URL changed.
+                await container.cache.invalidate_profile(ctx.current_user_id)  # type: ignore[arg-type]
 
                 return ProfileType(
                     id=strawberry.ID(str(updated_profile.id)),

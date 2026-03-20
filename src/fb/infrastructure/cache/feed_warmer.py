@@ -37,8 +37,8 @@ async def fan_out_new_post(
             author_id, len(friend_ids), MAX_FAN_OUT_FRIENDS,
         )
 
-    for user_id in targets:
-        await feed_cache.prepend_to_feed(user_id, post_data, score=score)
+    # Batch all ZADD+trim ops into a single pipeline (1 RTT instead of N)
+    await feed_cache.batch_prepend_to_feeds(targets, post_data, score=score)
 
 
 async def invalidate_post_everywhere(redis: Redis, post_id: str) -> None:

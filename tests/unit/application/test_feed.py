@@ -220,7 +220,7 @@ class TestGetFeedUseCase:
         result = await use_case.execute(input_data)
 
         assert len(result.posts) == 3
-        assert result.total_count == 5
+        assert result.total_count == 3  # page size (COUNT eliminated for perf)
         assert result.has_next_page is True
 
     @pytest.mark.asyncio
@@ -239,7 +239,7 @@ class TestGetFeedUseCase:
         result = await use_case.execute(input_data)
 
         assert len(result.posts) == 2
-        assert result.total_count == 5
+        assert result.total_count == 2  # page size (COUNT eliminated for perf)
         assert result.has_next_page is False
 
     @pytest.mark.asyncio
@@ -257,7 +257,8 @@ class TestGetFeedUseCase:
 
         feed_repo.get_feed_post_ids.assert_called_once()
         call_args = feed_repo.get_feed_post_ids.call_args[1]
-        assert call_args["limit"] == 50
+        # limit+1 fetched to detect has_next_page without COUNT query
+        assert call_args["limit"] == 51
 
     @pytest.mark.asyncio
     async def test_execute_enforces_minimum_limit_of_one(self) -> None:
@@ -274,7 +275,8 @@ class TestGetFeedUseCase:
 
         feed_repo.get_feed_post_ids.assert_called_once()
         call_args = feed_repo.get_feed_post_ids.call_args[1]
-        assert call_args["limit"] == 1
+        # limit+1 fetched to detect has_next_page without COUNT query
+        assert call_args["limit"] == 2
 
     @pytest.mark.asyncio
     async def test_execute_enforces_minimum_offset_of_zero(self) -> None:

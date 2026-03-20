@@ -71,6 +71,9 @@ class PostMutation:
                 )
             )
 
+        # Invalidate the cached post so next read reflects updated content.
+        await container.cache.invalidate_post(str(post_id))
+
         return PostType(
             id=strawberry.ID(result.id),
             author_id=result.author_id,
@@ -100,5 +103,8 @@ class PostMutation:
                     user_id=ctx.current_user_id,  # type: ignore[arg-type]
                 )
             )
+
+        # Remove deleted post from cache.
+        await container.cache.invalidate_post(str(post_id))
 
         return MessageResponse(message="Post deleted", success=True)

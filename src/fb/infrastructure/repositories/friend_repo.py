@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, over, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fb.domain.friend.entities import FriendRequest, Friendship
@@ -150,6 +150,25 @@ class SqlAlchemyFriendRepository:
             )
         )
         return [EntityId(row) for row in result.scalars().all()]
+
+    async def get_friends_with_count(
+        self, user_id: EntityId, limit: int = 20, offset: int = 0
+    ) -> tuple[list[EntityId], int]:
+        """Get paginated friends and total count in a single query using window function."""
+        total_expr = over(func.count(), partition_by=None)
+        stmt = (
+            select(FriendshipModel.friend_id, total_expr.label("total"))
+            .where(FriendshipModel.user_id == user_id.value)
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.execute(stmt)
+        rows = result.all()
+        if not rows:
+            return [], 0
+        friend_ids = [EntityId(row[0]) for row in rows]
+        total_count = rows[0][1]
+        return friend_ids, total_count
 
     async def get_friend_count(self, user_id: EntityId) -> int:
         # Single query — no N+1; COUNT(*) with WHERE on indexed user_id column.

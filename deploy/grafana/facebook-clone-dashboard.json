@@ -1,0 +1,293 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.0.0"}
+  ],
+  "annotations": {"list": []},
+  "description": "Facebook Clone — Phase 4 Observability: Redis, Feed, DB Pool, HTTP, WebSocket",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 10,
+      "title": "TODO: Redis Pipeline Latency (metric redis_pipeline_latency_seconds_bucket not yet instrumented)",
+      "description": "Waiting for redis_pipeline_latency_seconds_bucket histogram. Add it when Redis pipeline instrumentation is added in a future phase.",
+      "type": "text",
+      "gridPos": {"h": 4, "w": 12, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "**TODO**: `redis_pipeline_latency_seconds_bucket` histogram not yet instrumented.\n\nAdd `REDIS_PIPELINE_LATENCY_SECONDS` Histogram in `prometheus.py` and observe it in `feed_warmer.py::batch_prepend_to_feeds()`."
+      }
+    },
+    {
+      "id": 11,
+      "title": "TODO: Feed Fan-out Timing (metric feed_fanout_duration_seconds not yet instrumented)",
+      "description": "Waiting for feed_fanout_duration_seconds histogram. Add it to feed_warmer.py fan_out_new_post().",
+      "type": "text",
+      "gridPos": {"h": 4, "w": 12, "x": 12, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "**TODO**: `feed_fanout_duration_seconds` histogram not yet instrumented.\n\nAdd `FEED_FANOUT_DURATION_SECONDS` Histogram in `prometheus.py` and observe it in `feed_warmer.py::fan_out_new_post()`."
+      }
+    },
+    {
+      "id": 20,
+      "title": "Feed Cache Miss Rate",
+      "description": "Ratio of feed cache misses to total feed cache lookups (hits + misses). High values (>50%) indicate cold cache or aggressive TTL expiry.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {
+          "expr": "rate(cache_misses_total{cache_type=\"feed\"}[5m]) / (rate(cache_hits_total{cache_type=\"feed\"}[5m]) + rate(cache_misses_total{cache_type=\"feed\"}[5m]))",
+          "legendFormat": "Feed Cache Miss Rate"
+        },
+        {
+          "expr": "rate(cache_hits_total{cache_type=\"feed\"}[5m]) / (rate(cache_hits_total{cache_type=\"feed\"}[5m]) + rate(cache_misses_total{cache_type=\"feed\"}[5m]))",
+          "legendFormat": "Feed Cache Hit Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {"lineWidth": 2},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.3},
+              {"color": "red", "value": 0.5}
+            ]
+          }
+        }
+      },
+      "options": {"tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 21,
+      "title": "DB Pool Checkout Wait — P50 / P95 / P99",
+      "description": "Time processes wait to obtain a SQLAlchemy connection from the pool. P99 > 100ms triggers DBPoolExhausted alert.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(db_pool_checkout_wait_seconds_bucket[5m]))",
+          "legendFormat": "P50 checkout wait"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(db_pool_checkout_wait_seconds_bucket[5m]))",
+          "legendFormat": "P95 checkout wait"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(db_pool_checkout_wait_seconds_bucket[5m]))",
+          "legendFormat": "P99 checkout wait"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"lineWidth": 2},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.05},
+              {"color": "red", "value": 0.1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "title": "DB Pool Connections by State",
+      "description": "Current connection pool utilisation split by state: checked_out (in use), idle (available), overflow (above pool_size).",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "targets": [
+        {
+          "expr": "db_pool_connections{state=\"checked_out\"}",
+          "legendFormat": "Checked Out"
+        },
+        {
+          "expr": "db_pool_connections{state=\"idle\"}",
+          "legendFormat": "Idle"
+        },
+        {
+          "expr": "db_pool_connections{state=\"overflow\"}",
+          "legendFormat": "Overflow"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {"lineWidth": 2, "fillOpacity": 10}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Overflow"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "Checked Out"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byName", "options": "Idle"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "title": "HTTP Request Rate (RPS) by Endpoint",
+      "description": "Requests per second grouped by normalised endpoint path. UUIDs and numeric IDs are replaced with {id} to bound cardinality.",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (endpoint)",
+          "legendFormat": "{{ endpoint }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"lineWidth": 2}
+        }
+      }
+    },
+    {
+      "id": 40,
+      "title": "Active WebSocket Connections",
+      "description": "Number of currently active WebSocket connections across all users. Sourced from ConnectionManager.get_online_users() at scrape time.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 20},
+      "targets": [
+        {
+          "expr": "websocket_connections_active",
+          "legendFormat": "Active Connections"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["last"]},
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 500},
+              {"color": "red", "value": 1000}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 41,
+      "title": "HTTP Error Rate (5xx)",
+      "description": "Percentage of requests returning 5xx status codes.",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 20},
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
+          "legendFormat": "Error %"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["last"]},
+        "orientation": "auto",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 42,
+      "title": "Feed Cache Hit Ratio (overall)",
+      "description": "Gauge updated by the application tracking overall feed cache hit ratio (0–1). Complements the derived rate panels above.",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 20},
+      "targets": [
+        {
+          "expr": "feed_cache_hit_ratio",
+          "legendFormat": "Hit Ratio"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["last"]},
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "green", "value": 0.8}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 43,
+      "title": "DB Query Duration — P99 by Operation",
+      "description": "99th percentile database query duration grouped by operation type (select/insert/update/delete).",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 20},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(db_query_duration_seconds_bucket[5m]))",
+          "legendFormat": "P99 {{ operation }}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {"calcs": ["last"]},
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.1},
+              {"color": "red", "value": 0.5}
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["facebook-clone", "observability", "phase4"],
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "title": "Facebook Clone — Observability (Phase 4)",
+  "uid": "facebook-clone-phase4",
+  "version": 1
+}

@@ -14,6 +14,20 @@ class SqlAlchemyProfileRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def find_by_user_ids(self, user_ids: list[EntityId]) -> list[Profile | None]:
+        """Batch load profiles by user IDs — used by DataLoader to avoid N+1.
+
+        Returns results in the same order as the input user_ids (None for misses).
+        """
+        if not user_ids:
+            return []
+        id_values = [uid.value for uid in user_ids]
+        result = await self._session.execute(
+            select(ProfileModel).where(ProfileModel.user_id.in_(id_values))
+        )
+        by_user_id = {str(m.user_id): self._to_entity(m) for m in result.scalars().all()}
+        return [by_user_id.get(str(uid.value)) for uid in user_ids]
+
     async def find_by_user_id(self, user_id: EntityId) -> Profile | None:
         result = await self._session.execute(
             select(ProfileModel).where(ProfileModel.user_id == user_id.value)

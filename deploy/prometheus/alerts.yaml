@@ -1,0 +1,156 @@
+---
+# Prometheus alert rules — Phase 4 Observability & Chaos Hardening
+# facebook-clone backend
+
+groups:
+  - name: facebook-clone.phase4
+    interval: 30s
+    rules:
+
+      # ── Feed ──────────────────────────────────────────────────────────
+
+      # Feed cache miss rate > 50% for 5 minutes.
+      # A high miss rate indicates cold cache, excessive TTL expiry, or a
+      # cache invalidation bug. Check Redis memory, TTL settings, and
+      # recent deployments that might have flushed the cache.
+      - alert: FeedCacheMissRateHigh
+        expr: |
+          (
+            rate(cache_misses_total{cache_type="feed"}[5m])
+            /
+            (
+              rate(cache_hits_total{cache_type="feed"}[5m])
+              + rate(cache_misses_total{cache_type="feed"}[5m])
+            )
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          component: cache
+        annotations:
+          summary: "Feed cache miss rate is high ({{ $value | humanizePercentage }})"
+          description: >
+            Feed cache miss rate has been above 50% for the past 5 minutes.
+            This means the majority of feed requests are falling through to
+            the database. Check Redis memory usage, TTL configuration, and
+            recent cache invalidation activity.
+          runbook: "https://wiki.example.com/runbooks/feed-cache-miss-rate-high"
+
+      # ── Database Pool ─────────────────────────────────────────────────
+
+      # DB pool checkout wait P99 > 100ms for 5 minutes.
+      # Indicates pool exhaustion: requests queue waiting for a free
+      # connection. Consider increasing pool_size or max_overflow, or
+      # identify slow queries holding connections too long.
+      - alert: DBPoolExhausted
+        expr: |
+          histogram_quantile(
+            0.99,
+            rate(db_pool_checkout_wait_seconds_bucket[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+          component: database
+        annotations:
+          summary: "DB pool checkout wait P99 > 100ms ({{ $value | humanizeDuration }})"
+          description: >
+            The 99th percentile wait time to obtain a database connection from
+            the SQLAlchemy pool has exceeded 100ms for 5 minutes.
+            Current P99: {{ $value | humanizeDuration }}.
+            This typically means the pool is saturated. Check active queries,
+            pool_size and max_overflow settings in config.py, and whether any
+            long-running queries are holding connections.
+          runbook: "https://wiki.example.com/runbooks/db-pool-exhausted"
+
+      # ── Redis ─────────────────────────────────────────────────────────
+
+      # Redis connection failures spiking (cache misses across all types
+      # with simultaneous drop in hits signals Redis may be unreachable).
+      # Uses the cache_misses_total counter: a sudden jump with no
+      # corresponding hits is a reliable proxy for Redis being down.
+      - alert: RedisDown
+        expr: |
+          (
+            increase(cache_misses_total[2m])
+            > 100
+          )
+          and
+          (
+            rate(cache_hits_total[2m]) == 0
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          component: redis
+        annotations:
+          summary: "Redis appears to be unreachable — all cache lookups are missing"
+          description: >
+            Cache misses have spiked (>100 in 2 minutes) while cache hits
+            have dropped to zero. This pattern strongly indicates that Redis
+            is down or unreachable. Verify Redis pod/container health and
+            network connectivity from the API pods.
+          runbook: "https://wiki.example.com/runbooks/redis-down"
+
+      # ── Infrastructure ────────────────────────────────────────────────
+
+      # Container memory usage > 90% of its limit for 5 minutes.
+      # Uses kube_pod_container_resource_usage from kube-state-metrics /
+      # cAdvisor. High memory can trigger OOM kills and pod restarts.
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            container_memory_working_set_bytes{
+              namespace="production",
+              container=~"facebook-clone.*"
+            }
+            /
+            container_spec_memory_limit_bytes{
+              namespace="production",
+              container=~"facebook-clone.*"
+            }
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          component: kubernetes
+        annotations:
+          summary: "Container memory > 90% of limit ({{ $value | humanizePercentage }})"
+          description: >
+            Container {{ $labels.container }} in pod {{ $labels.pod }} is
+            using more than 90% of its configured memory limit.
+            Current usage: {{ $value | humanizePercentage }}.
+            Risk of OOM kill. Consider increasing the memory limit or
+            investigating memory leaks (unclosed DB sessions, large Redis
+            payloads, etc.).
+          runbook: "https://wiki.example.com/runbooks/high-memory-usage"
+
+      # Pod restart rate > 0 in the past 10 minutes.
+      # Any non-zero restart rate in production warrants investigation.
+      # Frequent restarts degrade WebSocket connection stability.
+      - alert: PodRestarting
+        expr: |
+          increase(
+            kube_pod_container_status_restarts_total{
+              namespace="production",
+              pod=~"facebook-clone.*"
+            }[10m]
+          ) > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: backend
+          component: kubernetes
+        annotations:
+          summary: "Pod {{ $labels.pod }} has restarted in the last 10 minutes"
+          description: >
+            Pod {{ $labels.pod }} (container {{ $labels.container }}) has
+            restarted {{ $value }} time(s) in the past 10 minutes.
+            Restarts drop all active WebSocket connections and may cause
+            in-flight requests to fail. Check pod logs for OOM kills,
+            liveness probe failures, or unhandled panics.
+          runbook: "https://wiki.example.com/runbooks/pod-restarting"

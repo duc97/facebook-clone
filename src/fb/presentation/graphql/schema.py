@@ -35,7 +35,6 @@ from fb.presentation.graphql.types.pagination import UserSearchResponse, UserSea
 
 # Post
 from fb.application.post.dtos import (
-    GetPostInput as GetPostDTO,
     GetPostsByAuthorInput as GetPostsByAuthorDTO,
 )
 from fb.application.post.get_post import GetPostUseCase
@@ -43,7 +42,6 @@ from fb.infrastructure.repositories.post_repo import SqlAlchemyPostRepository
 from fb.presentation.graphql.types.post import PostType
 
 # Feed
-from fb.application.post.feed_dtos import GetFeedInput
 from fb.application.post.get_feed import GetFeedUseCase
 from fb.infrastructure.repositories.feed_repo import SqlAlchemyFeedRepository
 from fb.presentation.graphql.types.feed import FeedPostType, FeedResponse
@@ -88,13 +86,19 @@ class Query:
     ) -> Optional[ProfileType]:
         ctx: GraphQLContext = info.context
         container = ctx.container
+        uid_str = str(user_id)
+        # Cache-aside: check Redis before hitting the database.
+        cached = await container.cache.get_profile(uid_str)
+        if cached is not None:
+            return _profile_dict_to_type(cached)
         async with container.session_factory() as session:
             profile_repo = SqlAlchemyProfileRepository(session)
             user_repo = SqlAlchemyUserRepository(session)
             use_case = GetProfileUseCase(profile_repo=profile_repo, user_repo=user_repo)
-            result = await use_case.execute(str(user_id))
+            result = await use_case.execute(uid_str)
         if result is None:
             return None
+        await container.cache.set_profile(uid_str, _profile_output_to_dict(result))
         return _profile_to_type(result)
 
     @strawberry.field
@@ -103,13 +107,19 @@ class Query:
         if not ctx.is_authenticated:
             return None
         container = ctx.container
+        uid_str = ctx.current_user_id  # type: ignore[assignment]
+        # Cache-aside: check Redis before hitting the database.
+        cached = await container.cache.get_profile(uid_str)
+        if cached is not None:
+            return _profile_dict_to_type(cached)
         async with container.session_factory() as session:
             profile_repo = SqlAlchemyProfileRepository(session)
             user_repo = SqlAlchemyUserRepository(session)
             use_case = GetProfileUseCase(profile_repo=profile_repo, user_repo=user_repo)
-            result = await use_case.execute(ctx.current_user_id)  # type: ignore[arg-type]
+            result = await use_case.execute(uid_str)
         if result is None:
             return None
+        await container.cache.set_profile(uid_str, _profile_output_to_dict(result))
         return _profile_to_type(result)
 
     # ── Friend ──
@@ -122,8 +132,7 @@ class Query:
         async with container.session_factory() as session:
             friend_repo = SqlAlchemyFriendRepository(session)
             uid = EntityId.from_str(str(user_id))
-            friend_ids = await friend_repo.get_friends(uid)
-            total_count = await friend_repo.get_friend_count(uid)
+            friend_ids, total_count = await friend_repo.get_friends_with_count(uid)
         return FriendListType(
             friend_ids=[str(fid) for fid in friend_ids],
             total_count=total_count,
@@ -207,19 +216,16 @@ class Query:
         self, info: strawberry.types.Info, post_id: strawberry.ID
     ) -> Optional[PostType]:
         ctx: GraphQLContext = info.context
-        container = ctx.container
-        async with container.session_factory() as session:
-            post_repo = SqlAlchemyPostRepository(session)
-            use_case = GetPostUseCase(post_repo=post_repo)
-            try:
-                result = await use_case.execute(GetPostDTO(post_id=str(post_id)))
-            except Exception:
-                return None
+        # Use DataLoader: batches multiple post() calls in one request into
+        # a single IN-clause query instead of N individual SELECTs
+        result = await ctx.loaders.post.load(str(post_id))
+        if result is None:
+            return None
         return PostType(
-            id=strawberry.ID(result.id),
-            author_id=result.author_id,
+            id=strawberry.ID(str(result.id)),
+            author_id=str(result.author_id),
             content=result.content,
-            media_urls=result.media_urls,
+            media_urls=list(result.media_urls),
             like_count=result.like_count,
             comment_count=result.comment_count,
             is_published=result.is_published,
@@ -385,4 +391,32 @@ def _profile_to_type(output: ProfileOutput) -> ProfileType:
         location=output.location,
         website=output.website,
         display_name=output.display_name,
+    )
+
+
+def _profile_output_to_dict(output: ProfileOutput) -> dict:  # type: ignore[type-arg]
+    """Serialize ProfileOutput to a plain dict for Redis storage."""
+    return {
+        "id": output.id,
+        "user_id": output.user_id,
+        "bio": output.bio,
+        "avatar_url": output.avatar_url,
+        "cover_photo_url": output.cover_photo_url,
+        "location": output.location,
+        "website": output.website,
+        "display_name": output.display_name,
+    }
+
+
+def _profile_dict_to_type(data: dict) -> ProfileType:  # type: ignore[type-arg]
+    """Deserialize a cached dict back to ProfileType (no DB hit)."""
+    return ProfileType(
+        id=strawberry.ID(data["id"]),
+        user_id=strawberry.ID(data["user_id"]),
+        bio=data.get("bio", ""),
+        avatar_url=data.get("avatar_url"),
+        cover_photo_url=data.get("cover_photo_url"),
+        location=data.get("location"),
+        website=data.get("website"),
+        display_name=data.get("display_name", ""),
     )

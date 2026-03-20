@@ -13,10 +13,21 @@ class Settings(BaseSettings):
     database_echo: bool = False
 
     # Database connection pool
-    db_pool_size: int = 10           # number of persistent connections per worker
-    db_pool_max_overflow: int = 20   # extra connections above pool_size allowed under load
-    db_pool_recycle: int = 3600      # recycle connections after 1 hour to avoid stale handles
-    db_pool_timeout: int = 30        # wait at most 30s for a free connection before raising
+    # pool_size: persistent connections kept open per worker process.
+    #   10 is a good baseline for a single-instance asyncpg app; tune up
+    #   (e.g. 20) if the Prometheus checkout_wait_seconds p99 climbs above 5 ms.
+    db_pool_size: int = 10
+    # max_overflow: burst capacity above pool_size.  Total max connections =
+    #   pool_size + max_overflow = 30 per worker.  Set 0 to disable overflow.
+    db_pool_max_overflow: int = 20
+    # pool_recycle: force-close and reopen connections after this many seconds
+    #   to prevent stale TCP handles.  1800 s (30 min) is safer than 3600 s
+    #   in Kubernetes environments where pods may restart within the hour.
+    db_pool_recycle: int = 1800
+    # pool_timeout: max seconds to wait for a free connection before raising
+    #   sqlalchemy.exc.TimeoutError.  30 s is reasonable; lower to 10 s for
+    #   stricter SLOs.
+    db_pool_timeout: int = 30
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -78,6 +89,7 @@ class Settings(BaseSettings):
     cache_ttl_post: int = 120
     cache_ttl_user_posts: int = 60
     cache_ttl_friends: int = 600
+    cache_ttl_friend_count: int = 120  # 2 min — invalidated on friend add/remove
     cache_ttl_notif_unread: int = 30
     cache_ttl_feed: int = 60
     cache_enabled: bool = True

@@ -49,24 +49,24 @@ class GetFeedUseCase:
         # Get user's friends
         friend_ids = await self._friend_repo.get_friends(user_id, limit=1000)
 
-        # Get feed post IDs (user's posts + friends' posts, chronological order)
+        # Fetch limit+1 to detect has_next_page without a separate COUNT query
         post_ids = await self._feed_repo.get_feed_post_ids(
-            user_id=user_id, friend_ids=friend_ids, limit=limit, offset=offset
+            user_id=user_id, friend_ids=friend_ids, limit=limit + 1, offset=offset
         )
 
         if not post_ids:
             return FeedOutput(posts=[], total_count=0, has_next_page=False)
 
-        # Fetch the actual posts
-        posts = await self._feed_repo.get_feed_posts(post_ids)
+        has_next = len(post_ids) > limit
+        page_ids = post_ids[:limit]
 
-        # Get total count for pagination
-        total_count = await self._feed_repo.get_feed_total_count(user_id, friend_ids)
+        # Fetch the actual posts
+        posts = await self._feed_repo.get_feed_posts(page_ids)
 
         return FeedOutput(
             posts=[self._to_output(p) for p in posts],
-            total_count=total_count,
-            has_next_page=offset + limit < total_count,
+            total_count=len(posts),
+            has_next_page=has_next,
         )
 
     async def execute_ranked(self, input_data: GetRankedFeedInput) -> FeedOutput:
@@ -97,8 +97,11 @@ class GetFeedUseCase:
 
         candidates = await self._feed_repo.get_feed_posts(post_ids)
 
-        # Get total count for pagination
-        total_count = await self._feed_repo.get_feed_total_count(user_id, friend_ids)
+        # Estimate has_next_page from candidate pool size instead of
+        # running a separate COUNT(*) query on every request.
+        # The candidate pool fetches limit * 3 rows — if we got that many,
+        # there are likely more posts available.
+        has_more = len(candidates) >= candidate_limit
 
         if input_data.mode == "chronological":
             # Sort by created_at descending (chronological order)
@@ -120,8 +123,8 @@ class GetFeedUseCase:
 
         return FeedOutput(
             posts=[self._to_output(p) for p in final_posts],
-            total_count=total_count,
-            has_next_page=len(final_posts) < total_count,
+            total_count=len(final_posts),
+            has_next_page=has_more,
         )
 
     async def execute_cursor(self, input_data: GetFeedCursorInput) -> FeedCursorOutput:

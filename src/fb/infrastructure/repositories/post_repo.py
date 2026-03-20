@@ -14,6 +14,20 @@ class SqlAlchemyPostRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def find_by_ids(self, post_ids: list[EntityId]) -> list[Post | None]:
+        """Batch load posts by IDs — used by DataLoader to avoid N+1.
+
+        Returns results in the same order as the input IDs (None for misses).
+        """
+        if not post_ids:
+            return []
+        id_values = [pid.value for pid in post_ids]
+        result = await self._session.execute(
+            select(PostModel).where(PostModel.id.in_(id_values))
+        )
+        by_id = {str(m.id): self._to_entity(m) for m in result.scalars().all()}
+        return [by_id.get(str(pid.value)) for pid in post_ids]
+
     async def find_by_id(self, post_id: EntityId) -> Post | None:
         result = await self._session.execute(
             select(PostModel).where(PostModel.id == post_id.value)

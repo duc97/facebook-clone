@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: facebook-clone-config
+  namespace: facebook-clone
+  labels:
+    app: facebook-clone
+    component: api
+    version: "1.0"
+    app.kubernetes.io/name: facebook-clone
+    app.kubernetes.io/component: api
+    app.kubernetes.io/version: "1.0"
+data:
+  # Application
+  DEBUG: "false"
+  API_VERSION: "1.0"
+
+  # Database (non-secret pool settings)
+  DATABASE_ECHO: "false"
+  DB_POOL_SIZE: "10"
+  DB_POOL_MAX_OVERFLOW: "20"
+  DB_POOL_RECYCLE: "1800"
+  DB_POOL_TIMEOUT: "30"
+
+  # JWT (non-secret algorithm / expiry settings)
+  JWT_ALGORITHM: "HS256"
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+  JWT_REFRESH_TOKEN_EXPIRE_DAYS: "7"
+
+  # Storage
+  STORAGE_BACKEND: "s3"
+  S3_REGION: "us-east-1"
+  UPLOAD_DIR: "/app/uploads"
+  MAX_MEDIA_UPLOAD_SIZE: "52428800"
+
+  # CORS
+  CORS_ORIGINS: '["https://facebook-clone.example.com"]'
+
+  # Feed
+  FEED_CACHE_MAX_SIZE: "200"
+  FEED_FAN_OUT_MAX_FRIENDS: "500"
+
+  # Cache TTLs (seconds)
+  CACHE_ENABLED: "true"
+  CACHE_TTL_PROFILE: "300"
+  CACHE_TTL_POST: "120"
+  CACHE_TTL_USER_POSTS: "60"
+  CACHE_TTL_FRIENDS: "600"
+  CACHE_TTL_FRIEND_COUNT: "120"
+  CACHE_TTL_NOTIF_UNREAD: "30"
+  CACHE_TTL_FEED: "60"
+
+  # Rate Limiting
+  RATE_LIMIT_GUEST: "30"
+  RATE_LIMIT_USER: "60"
+  RATE_LIMIT_PREMIUM: "120"
+
+  # Image Processing
+  IMAGE_MAX_WIDTH: "1920"
+  IMAGE_MAX_HEIGHT: "1080"
+  IMAGE_THUMBNAIL_SIZE: "320"
+  IMAGE_QUALITY: "85"
+  IMAGE_MAX_SIZE_BYTES: "10485760"
+
+  # Video Processing
+  VIDEO_MAX_SIZE_BYTES: "52428800"
+  VIDEO_THUMBNAIL_AT_SECOND: "1.0"

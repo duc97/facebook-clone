@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: facebook-clone
+  namespace: facebook-clone
+  labels:
+    app: facebook-clone
+    component: api
+    version: "1.0"
+    app.kubernetes.io/name: facebook-clone
+    app.kubernetes.io/component: api
+    app.kubernetes.io/version: "1.0"
+spec:
+  type: ClusterIP
+  selector:
+    app: facebook-clone
+    component: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP

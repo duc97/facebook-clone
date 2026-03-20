@@ -5,6 +5,7 @@ from typing import Any
 from strawberry.fastapi import BaseContext
 
 from fb.container import Container
+from fb.presentation.graphql.loaders import GraphQLLoaders
 
 
 class GraphQLContext(BaseContext):
@@ -19,6 +20,10 @@ class GraphQLContext(BaseContext):
         self.current_user_id = current_user_id
         self.current_user_email = current_user_email
         self._request = request
+        # Request-scoped DataLoaders — one instance per request, never shared
+        self.loaders: GraphQLLoaders = GraphQLLoaders.for_request(
+            container.session_factory
+        )
 
     @property
     def is_authenticated(self) -> bool:

@@ -582,10 +582,12 @@ async def get_reactions(
         reaction_repo = SqlAlchemyReactionRepository(session)
         pid = EId.from_str(post_id)
         reactions = await reaction_repo.find_by_post(pid, limit, offset)
-        total = await reaction_repo.count_by_post(pid)
+        # count_by_type already groups all reactions — derive total from sum
+        # This eliminates a separate COUNT(*) round-trip
         type_counts = await reaction_repo.count_by_type(pid)
 
     counts = {rt.value: count for rt, count in type_counts.items()}
+    total = sum(counts.values())
 
     return success_response(
         ReactionsListResponse(

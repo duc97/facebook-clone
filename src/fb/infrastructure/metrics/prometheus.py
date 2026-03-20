@@ -1,6 +1,49 @@
 """Prometheus metrics instrumentation for the FastAPI application."""
 from __future__ import annotations
 
+# ── METRICS_CARDINALITY_NOTES ─────────────────────────────────────────────────
+#
+# CARDINALITY RULES (enforced throughout this file):
+#   ALLOWED labels  : HTTP method (bounded: GET/POST/PUT/DELETE/PATCH/OPTIONS)
+#                     HTTP status_code (bounded: 200/201/204/400/401/403/404/422/500/…)
+#                     endpoint path    (bounded: normalised by _normalize_path below)
+#                     pool state       (bounded: "checked_out"/"idle"/"overflow")
+#                     cache_type       (bounded: "feed"/"profile"/"post"/"friend_count")
+#                     operation        (bounded: "select"/"insert"/"update"/"delete")
+#   FORBIDDEN labels: user_id, post_id, comment_id, or any unbounded string
+#                     that grows proportionally to the data set.
+#
+# LABEL AUDIT (Phase 4 review, 2026-03-20):
+#
+#   http_requests_total          [method, endpoint, status_code] ✓ SAFE
+#     - endpoint: normalised by _normalize_path(); UUIDs → {id}, numeric IDs → {id}
+#     - status_code: HTTP status integers, cardinality ≈ 30
+#
+#   http_request_duration_seconds [method, endpoint] ✓ SAFE
+#     - same normalisation as above
+#
+#   http_requests_in_progress    [method, endpoint] ✓ SAFE
+#
+#   websocket_connections_active (no labels) ✓ SAFE
+#
+#   cache_hits_total             [cache_type] ✓ SAFE
+#   cache_misses_total           [cache_type] ✓ SAFE
+#     - cache_type is caller-controlled; callers MUST use only the bounded
+#       set: "feed", "profile", "post", "friend_count".  Never pass a user ID.
+#
+#   db_query_duration_seconds    [operation] ✓ SAFE
+#     - operation MUST be one of: "select", "insert", "update", "delete".
+#       Never include table names or query text.
+#
+#   feed_cache_hit_ratio         (no labels) ✓ SAFE
+#
+#   db_pool_checkout_wait_seconds (no labels) ✓ SAFE
+#
+#   db_pool_connections          [state] ✓ SAFE
+#     - state is bounded to: "checked_out", "idle", "overflow"
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
 import time
 from collections.abc import Callable
 
@@ -61,6 +104,18 @@ DB_QUERY_DURATION_SECONDS = Histogram(
 FEED_CACHE_HIT_RATIO = Gauge(
     "feed_cache_hit_ratio",
     "Feed cache hit ratio (0-1)",
+)
+
+DB_POOL_CHECKOUT_WAIT_SECONDS = Histogram(
+    "db_pool_checkout_wait_seconds",
+    "Time spent waiting for a connection from the pool (seconds)",
+    buckets=[0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
+)
+
+DB_POOL_CONNECTIONS = Gauge(
+    "db_pool_connections",
+    "Current connection pool utilisation",
+    ["state"],  # labels: "checked_out", "idle", "overflow"
 )
 
 # ── Middleware ────────────────────────────────────────────────────────

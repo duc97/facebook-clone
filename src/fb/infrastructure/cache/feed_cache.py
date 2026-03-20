@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
 
 from redis.asyncio import Redis
 
@@ -109,39 +108,72 @@ class RedisFeedCache:
     async def prepend_to_feed(self, user_id: str, post: dict, score: float | None = None) -> None:
         """Add a new post to the top of user's ranked feed (fan-out on write).
 
-        Uses current unix timestamp as score if score not provided.
+        Uses a pipeline to batch ZADD + trim into a single round-trip.
         """
         key = f"feed:ranked:{user_id}"
         try:
             if score is None:
                 score = float(time.time())
             member = json.dumps(post, default=str)
-            await self._redis.zadd(key, {member: score})
-            # Cap size
-            size = await self._redis.zcard(key)
-            if size > MAX_FEED_SIZE:
-                # Remove lowest-score entries
-                await self._redis.zremrangebyrank(key, 0, size - MAX_FEED_SIZE - 1)
+            pipe = self._redis.pipeline()
+            await pipe.zadd(key, {member: score})
+            # Trim to MAX_FEED_SIZE in the same pipeline (keep top entries)
+            await pipe.zremrangebyrank(key, 0, -(MAX_FEED_SIZE + 1))
+            await pipe.execute()
         except Exception:
             logger.warning("prepend_to_feed failed for user=%s", user_id, exc_info=True)
+
+    async def batch_prepend_to_feeds(
+        self, user_ids: list[str], post: dict, score: float | None = None
+    ) -> None:
+        """Batch fan-out: add a post to multiple users' feeds in a single pipeline.
+
+        Reduces N sequential round-trips to 1 pipelined call.
+        """
+        if not user_ids:
+            return
+        try:
+            if score is None:
+                score = float(time.time())
+            member = json.dumps(post, default=str)
+            pipe = self._redis.pipeline()
+            for user_id in user_ids:
+                key = f"feed:ranked:{user_id}"
+                await pipe.zadd(key, {member: score})
+                await pipe.zremrangebyrank(key, 0, -(MAX_FEED_SIZE + 1))
+            await pipe.execute()
+        except Exception:
+            logger.warning(
+                "batch_prepend_to_feeds failed for %d users", len(user_ids), exc_info=True
+            )
 
     async def remove_post_from_feeds(self, post_id: str) -> None:
         """Remove a deleted/updated post from all cached feeds.
 
-        Scans feed:ranked:* keys and removes entries containing the post_id.
-        Note: Use sparingly — O(n*m) where n=feeds, m=entries.
+        Uses SCAN (non-blocking) instead of KEYS to iterate feed keys.
+        For each feed, uses a pipeline to batch ZREM operations.
         """
         try:
-            keys = await self._redis.keys("feed:ranked:*")
-            for key in keys:
-                items = await self._redis.zrange(key, 0, -1)
-                for item in items:
-                    try:
-                        data = json.loads(item)
-                        if data.get("id") == post_id:
-                            await self._redis.zrem(key, item)
-                    except Exception:
-                        pass
+            cursor: int | bytes = 0
+            while True:
+                cursor, keys = await self._redis.scan(
+                    cursor=cursor, match="feed:ranked:*", count=100
+                )
+                if keys:
+                    for key in keys:
+                        items = await self._redis.zrange(key, 0, -1)
+                        to_remove = []
+                        for item in items:
+                            try:
+                                data = json.loads(item)
+                                if data.get("id") == post_id:
+                                    to_remove.append(item)
+                            except Exception:
+                                pass
+                        if to_remove:
+                            await self._redis.zrem(key, *to_remove)
+                if not cursor:
+                    break
         except Exception:
             logger.warning("remove_post_from_feeds failed for post=%s", post_id, exc_info=True)
 

@@ -46,6 +46,9 @@ class InteractionMutation:
                 )
             )
 
+        # Invalidate cached post — comment_count changed.
+        await container.cache.invalidate_post(str(post_id))
+
         return CommentType(
             id=strawberry.ID(result.id),
             post_id=result.post_id,
@@ -102,6 +105,9 @@ class InteractionMutation:
                 )
             )
 
+        # Invalidate cached post — like_count changed.
+        await container.cache.invalidate_post(str(post_id))
+
         return LikeType(
             id=strawberry.ID(result.id),
             post_id=result.post_id,
@@ -130,5 +136,8 @@ class InteractionMutation:
                     user_id=ctx.current_user_id,  # type: ignore[arg-type]
                 )
             )
+
+        # Invalidate cached post — like_count changed.
+        await container.cache.invalidate_post(str(post_id))
 
         return MessageResponse(message="Post unliked", success=True)

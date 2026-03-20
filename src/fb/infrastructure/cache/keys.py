@@ -17,6 +17,7 @@ TTL_PROFILE         = 300   # 5 min
 TTL_POST            = 120   # 2 min
 TTL_USER_POSTS      = 60    # 1 min
 TTL_FRIENDS_LIST    = 600   # 10 min
+TTL_FRIEND_COUNT    = 120   # 2 min — invalidated on friend add/remove
 TTL_NOTIF_UNREAD    = 30    # 30 sec
 TTL_FEED            = 60    # 1 min (feed post ID list)
 TTL_MEDIA_LIST      = 120   # 2 min
@@ -35,6 +36,10 @@ def user_posts_key(user_id: str, limit: int, offset: int) -> str:
 
 def friends_list_key(user_id: str) -> str:
     return f"friends:{user_id}"
+
+def friend_count_key(user_id: str) -> str:
+    """Key for the total friend count (integer).  TTL: TTL_FRIEND_COUNT."""
+    return f"friend_count:{user_id}"
 
 def notif_unread_key(user_id: str) -> str:
     return f"notif_unread:{user_id}"

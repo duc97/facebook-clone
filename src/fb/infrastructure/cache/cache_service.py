@@ -8,11 +8,13 @@ from __future__ import annotations
 import logging
 
 from fb.infrastructure.cache.keys import (
+    TTL_FRIEND_COUNT,
     TTL_FRIENDS_LIST,
     TTL_NOTIF_UNREAD,
     TTL_POST,
     TTL_PROFILE,
     TTL_USER_POSTS,
+    friend_count_key,
     friends_list_key,
     notif_unread_key,
     post_key,
@@ -64,6 +66,19 @@ class CacheService:
         """Invalidate all paginated user-posts caches for this user."""
         await self._cache.delete_pattern(f"user_posts:{user_id}:*")
 
+    # ── Post batch (MGET) ──────────────────────────────────────────────
+
+    async def mget_posts(self, post_ids: list[str]) -> list[dict | None]:
+        """Batch-fetch multiple post payloads in a single MGET round trip.
+
+        Returns a list aligned to ``post_ids`` — ``None`` for cache misses.
+        Callers should fall back to the DB for any ``None`` entries and then
+        populate the cache with ``set_post``.
+        """
+        keys = [post_key(pid) for pid in post_ids]
+        results = await self._cache.mget(keys)
+        return [r if isinstance(r, dict) else None for r in results]
+
     # ── Friends list ───────────────────────────────────────────────────
 
     async def get_friends(self, user_id: str) -> list[str] | None:
@@ -74,6 +89,20 @@ class CacheService:
 
     async def invalidate_friends(self, user_id: str) -> None:
         await self._cache.delete(friends_list_key(user_id))
+
+    # ── Friend count ───────────────────────────────────────────────────
+
+    async def get_friend_count(self, user_id: str) -> int | None:
+        """Return cached total friend count, or None on miss."""
+        val = await self._cache.get(friend_count_key(user_id))
+        return int(val) if val is not None else None
+
+    async def set_friend_count(self, user_id: str, count: int) -> None:
+        await self._cache.set(friend_count_key(user_id), count, TTL_FRIEND_COUNT)
+
+    async def invalidate_friend_count(self, user_id: str) -> None:
+        """Invalidate friend count after add/remove friend events."""
+        await self._cache.delete(friend_count_key(user_id))
 
     # ── Notification unread count ──────────────────────────────────────
 

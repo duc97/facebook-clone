@@ -6,6 +6,8 @@ from fb.application.post.dtos import GetPostsByAuthorInput
 from fb.application.post.get_post import GetPostUseCase
 from fb.application.profile.dtos import (
     UpdateProfileInput as UpdateProfileDTO,
+)
+from fb.application.profile.dtos import (
     UploadAvatarInput as UploadAvatarDTO,
 )
 from fb.application.profile.get_profile import GetProfileUseCase
@@ -17,7 +19,6 @@ from fb.infrastructure.repositories.friend_repo import SqlAlchemyFriendRepositor
 from fb.infrastructure.repositories.post_repo import SqlAlchemyPostRepository
 from fb.infrastructure.repositories.profile_repo import SqlAlchemyProfileRepository
 from fb.infrastructure.repositories.user_repo import SqlAlchemyUserRepository
-from fb.infrastructure.storage.local_storage import LocalFileStorage
 from fb.presentation.dependencies import get_container, get_current_user_id
 from fb.presentation.rest.response import paginated_response, success_response
 from fb.presentation.rest.v1.schemas import (
@@ -155,7 +156,7 @@ async def upload_user_avatar(
         )
 
     file_data = await file.read()
-    file_storage = LocalFileStorage(container.settings.upload_dir)
+    file_storage = container.file_storage
 
     uow = container.create_uow()
     async with uow:
@@ -204,8 +205,9 @@ async def get_user_friends(
     async with container.session_factory() as session:
         friend_repo = SqlAlchemyFriendRepository(session)
         uid = EntityId.from_str(user_id)
-        friend_ids = await friend_repo.get_friends(uid, limit=limit, offset=offset)
-        total = await friend_repo.get_friend_count(uid)
+        friend_ids, total = await friend_repo.get_friends_with_count(
+            uid, limit=limit, offset=offset
+        )
 
     response = FriendListResponse(
         friend_ids=[str(fid) for fid in friend_ids],

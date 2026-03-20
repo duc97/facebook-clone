@@ -100,13 +100,18 @@ class TestRedisFeedCache:
         mock_pipe.execute.assert_awaited_once()
 
     async def test_invalidate_deletes_key(self) -> None:
-        """invalidate() removes the feed cache key."""
-        mock_redis = AsyncMock()
+        """invalidate() removes all feed keys for a user via pipeline."""
+        mock_redis = MagicMock()
+        mock_pipe = AsyncMock()
+        mock_redis.pipeline.return_value = mock_pipe
         cache = RedisFeedCache(mock_redis)
 
         await cache.invalidate("user-123")
 
-        mock_redis.delete.assert_awaited_once_with("feed:user-123")
+        mock_pipe.delete.assert_any_await("feed:user-123")
+        mock_pipe.delete.assert_any_await("feed:ranked:user-123")
+        mock_pipe.delete.assert_any_await("feed:chron:user-123")
+        mock_pipe.execute.assert_awaited_once()
 
     def test_default_ttl(self) -> None:
         """Default TTL is 300 seconds (5 minutes)."""

@@ -363,7 +363,7 @@ class TestExecuteRanked:
         )
 
         assert result.has_next_page is True
-        assert result.total_count == 10
+        assert result.total_count == 3  # page size (COUNT eliminated for perf)
 
     @pytest.mark.asyncio
     async def test_existing_execute_still_works(self) -> None:
