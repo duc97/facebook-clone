@@ -7,13 +7,16 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
+    user_name: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_.]+$")
     email: EmailStr
+    first_name: str = Field(..., min_length=1, max_length=50)
+    last_name: str = Field(..., min_length=1, max_length=50)
     password: str = Field(..., min_length=6, max_length=128)
-    display_name: str = Field(..., min_length=1, max_length=100)
+    birthday: str | None = Field(default=None, description="YYYY-MM-DD format")
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    user_name: str
     password: str
 
 
@@ -33,9 +36,19 @@ class TokenResponse(BaseModel):
 
 class UserResponse(BaseModel):
     id: str
+    user_name: str
     email: str
+    first_name: str
+    last_name: str
     display_name: str
     is_active: bool
+
+
+class EditUserRequest(BaseModel):
+    first_name: str | None = Field(default=None, min_length=1, max_length=50)
+    last_name: str | None = Field(default=None, min_length=1, max_length=50)
+    birthday: str | None = Field(default=None, description="YYYY-MM-DD format")
+    password: str | None = Field(default=None, min_length=6, max_length=128)
 
 
 # ── Profile ──────────────────────────────────────────────────────────────────
@@ -58,7 +71,7 @@ class ProfileResponse(BaseModel):
     display_name: str
 
 
-# ── Friend ───────────────────────────────────────────────────────────────────
+# ── Friend / Follow ─────────────────────────────────────────────────────────
 
 
 class SendFriendRequestBody(BaseModel):
@@ -77,6 +90,11 @@ class FriendListResponse(BaseModel):
     total_count: int
 
 
+class FollowListResponse(BaseModel):
+    users: list[str]
+    total_count: int
+
+
 class MessageResponse(BaseModel):
     message: str
 
@@ -85,19 +103,20 @@ class MessageResponse(BaseModel):
 
 
 class PostCreateRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=5000)
-    media_urls: list[str] | None = None
+    text: str = Field(..., min_length=1, max_length=5000)
+    image: str | None = None
 
 
 class PostUpdateRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=5000)
+    text: str = Field(..., min_length=1, max_length=5000)
+    image: str | None = None
 
 
 class PostResponse(BaseModel):
     id: str
     author_id: str
-    content: str
-    media_urls: list[str]
+    text: str
+    image: str | None
     like_count: int
     comment_count: int
     is_published: bool
@@ -105,14 +124,14 @@ class PostResponse(BaseModel):
 
 
 class CommentCreateRequest(BaseModel):
-    content: str = Field(..., min_length=1, max_length=2000)
+    text: str = Field(..., min_length=1, max_length=2000)
 
 
 class CommentResponse(BaseModel):
     id: str
     post_id: str
     author_id: str
-    content: str
+    text: str
     created_at: str | None = None
 
 
@@ -193,8 +212,8 @@ class FeedPostResponse(BaseModel):
 
     id: str
     author_id: str
-    content: str
-    media_urls: list[str]
+    text: str
+    image: str | None = None
     like_count: int
     comment_count: int
     created_at: str | None = None

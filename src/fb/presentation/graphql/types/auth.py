@@ -13,7 +13,10 @@ class TokenResponse:
 @strawberry.type
 class UserType:
     id: strawberry.ID
+    user_name: str
     email: str
+    first_name: str
+    last_name: str
     display_name: str
     is_active: bool
 

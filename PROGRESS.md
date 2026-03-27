@@ -62,5 +62,25 @@
   - docs/DISASTER_RECOVERY.md (RTO/RPO targets, failure scenarios, data recovery, DR testing)
   - docs/ANALYSIS.md (strengths, weaknesses, bottlenecks, security, Facebook comparison, 1M/100M roadmap, cost estimate)
 
+- Phase 9: API Redesign — Follow Model + New User Fields
+  - Migration 007: Add user_name, first_name, last_name, date_of_birth to users table + create follows table
+  - User entity: thêm user_name (unique, 3-50 chars), first_name, last_name, date_of_birth
+  - UserName value object: validation regex ^[a-zA-Z0-9_.]{3,50}$
+  - Auth: login via user_name thay vì email (POST /sessions)
+  - Sign up: POST /users với {user_name, email, first_name, last_name, birthday, password}
+  - Edit profile: PUT /users với {first_name, last_name, birthday, password}
+  - Follow model (unidirectional): Follow entity, FollowRepository protocol, SqlAlchemyFollowRepository
+  - Follow endpoints: POST /friends/{user_id}, DELETE /friends/{user_id}, GET /friends/{user_id}
+  - User posts: GET /friends/{user_id}/posts
+  - Newsfeed: GET /newsfeeds (đổi từ /feed)
+  - Post fields: content → text, media_urls → image (single URL)
+  - Comment field: content → text
+  - Like endpoint: /posts/{id}/like → /posts/{id}/likes (plural)
+  - EditUserUseCase: update first_name, last_name, birthday, password
+  - FollowUserUseCase, UnfollowUserUseCase, GetFollowingUseCase
+  - New exceptions: UserNameAlreadyExistsError, CannotFollowSelfError, AlreadyFollowingError, NotFollowingError
+  - GraphQL schema updated: UserType thêm user_name, first_name, last_name
+  - Tests: 441 passed (6 pre-existing failures in feed/cache — không liên quan)
+
 ## Đang làm
 - (nothing — all phases complete)

@@ -1,7 +1,7 @@
 # Facebook Clone — REST API Reference
 
 > **Version:** 1.0
-> **Last updated:** 2026-03-13
+> **Last updated:** 2026-03-27
 > **Base URL:** `http://localhost:8000`
 
 ---
@@ -102,11 +102,20 @@ All list endpoints accept `page` and `limit` query parameters:
 │  Client  │                          │  API Server  │
 └────┬─────┘                          └──────┬───────┘
      │                                       │
-     │  POST /api/v1/auth/register           │
-     │  { email, password, username }        │
+     │  POST /api/v1/users                   │
+     │  { user_name, email, first_name,      │
+     │    last_name, birthday, password }     │
      │──────────────────────────────────────▶│
      │                                       │  Hash password (bcrypt)
      │                                       │  Create user record
+     │  201 { message }                      │
+     │◀──────────────────────────────────────│
+     │                                       │
+     │  POST /api/v1/sessions                │
+     │  { user_name, password }              │
+     │──────────────────────────────────────▶│
+     │                                       │  Find user by user_name
+     │                                       │  Verify password
      │                                       │  Issue access + refresh tokens
      │  200 { access_token, refresh_token }  │
      │◀──────────────────────────────────────│
@@ -125,7 +134,6 @@ All list endpoints accept `page` and `limit` query parameters:
      │                                       │  Validate refresh token
      │                                       │  Check not blacklisted
      │                                       │  Issue new token pair
-     │                                       │  Blacklist old refresh token
      │  200 { access_token, refresh_token }  │
      │◀──────────────────────────────────────│
      │                                       │
@@ -399,11 +407,9 @@ The API uses URL path versioning (`/api/v1/`). The version segment is mandatory 
 
 ### 6.1 Auth
 
-Base path: `/api/v1/auth`
-
 ---
 
-#### `POST /auth/register`
+#### `POST /users` — Sign Up
 
 Register a new user account.
 
@@ -412,10 +418,44 @@ Register a new user account.
 
 ```json
 {
-  "username": "johndoe",
+  "user_name": "johndoe",
   "email": "john@example.com",
-  "password": "SecurePass123!",
-  "full_name": "John Doe"
+  "first_name": "John",
+  "last_name": "Doe",
+  "birthday": "1990-05-15",
+  "password": "SecurePass123!"
+}
+```
+
+- **Response `201`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "User registered successfully"
+  },
+  "error": null,
+  "meta": null,
+  "version": "1.0"
+}
+```
+
+- **Common errors:** `400` (validation), `409` (email or username already taken)
+
+---
+
+#### `POST /sessions` — Login
+
+Authenticate an existing user by username.
+
+- **Auth required:** No
+- **Request body:**
+
+```json
+{
+  "user_name": "johndoe",
+  "password": "SecurePass123!"
 }
 ```
 
@@ -435,26 +475,41 @@ Register a new user account.
 }
 ```
 
-- **Common errors:** `400` (validation), `409` (email/username already taken)
+- **Common errors:** `401` (invalid credentials), `400` (validation)
 
 ---
 
-#### `POST /auth/login`
+#### `PUT /users` — Edit Profile
 
-Authenticate an existing user.
+Edit the authenticated user's profile fields.
 
-- **Auth required:** No
-- **Request body:**
+- **Auth required:** Yes (Bearer)
+- **Request body:** (all fields optional)
 
 ```json
 {
-  "email": "john@example.com",
-  "password": "SecurePass123!"
+  "first_name": "John",
+  "last_name": "M. Doe",
+  "birthday": "1990-05-15",
+  "password": "NewSecurePass456!"
 }
 ```
 
-- **Response `200`:** Same as `/auth/register`
-- **Common errors:** `401` (invalid credentials), `400` (validation)
+- **Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Profile updated successfully"
+  },
+  "error": null,
+  "meta": null,
+  "version": "1.0"
+}
+```
+
+- **Common errors:** `401`, `404`
 
 ---
 
@@ -506,12 +561,12 @@ Retrieve the currently authenticated user's profile.
   "success": true,
   "data": {
     "id": "u_01HX",
-    "username": "johndoe",
+    "user_name": "johndoe",
     "email": "john@example.com",
-    "full_name": "John Doe",
-    "avatar_url": "https://cdn.example.com/avatars/johndoe.jpg",
-    "bio": "Software engineer",
-    "created_at": "2025-01-15T10:30:00Z"
+    "first_name": "John",
+    "last_name": "Doe",
+    "display_name": "John Doe",
+    "is_active": true
   },
   "error": null,
   "meta": null,
@@ -655,34 +710,29 @@ Check if a specific user is currently online.
 
 ---
 
-### 6.3 Friends
+### 6.3 Friends (Follow Model)
 
 Base path: `/api/v1/friends`
 
+> **Note:** The social model uses unidirectional **follow** (not friend requests).
+> Following is immediate — no accept/reject flow.
+
 ---
 
-#### `POST /friends/request`
+#### `GET /friends/{user_id}` — See Follow List
 
-Send a friend request.
+Get the list of users that `user_id` is following.
 
-- **Auth required:** Yes
-- **Request body:**
-
-```json
-{ "receiver_id": "u_02AY" }
-```
-
+- **Auth required:** No
+- **Query params:** `limit` (default 20), `offset` (default 0)
 - **Response `200`:**
 
 ```json
 {
   "success": true,
   "data": {
-    "request_id": "fr_09ZX",
-    "sender_id": "u_01HX",
-    "receiver_id": "u_02AY",
-    "status": "pending",
-    "created_at": "2026-03-13T08:00:00Z"
+    "users": ["u_02AY", "u_03BZ", "u_04CW"],
+    "total_count": 42
   },
   "error": null,
   "meta": null,
@@ -690,54 +740,32 @@ Send a friend request.
 }
 ```
 
-- **Common errors:** `409` (request already sent or already friends), `404` (user not found)
-
 ---
 
-#### `POST /friends/accept`
+#### `POST /friends/{user_id}` — Follow
 
-Accept a pending friend request.
+Follow another user.
 
 - **Auth required:** Yes
-- **Request body:**
+- **Response `201`:**
 
 ```json
-{ "request_id": "fr_09ZX" }
+{
+  "success": true,
+  "data": { "message": "Followed successfully" },
+  "error": null,
+  "meta": null,
+  "version": "1.0"
+}
 ```
 
-- **Response `200`:** Updated friend request with `"status": "accepted"`
-- **Common errors:** `404` (request not found), `403` (not the receiver)
+- **Common errors:** `400` (cannot follow self), `409` (already following)
 
 ---
 
-#### `POST /friends/reject`
+#### `DELETE /friends/{user_id}` — Unfollow
 
-Reject a pending friend request.
-
-- **Auth required:** Yes
-- **Request body:**
-
-```json
-{ "request_id": "fr_09ZX" }
-```
-
-- **Response `200`:** Updated friend request with `"status": "rejected"`
-
----
-
-#### `DELETE /friends/{user_id}`
-
-Remove a friend.
-
-- **Auth required:** Yes
-- **Response:** `204 No Content`
-- **Common errors:** `404` (not friends with this user)
-
----
-
-#### `GET /friends/mutual/{user_id}`
-
-Get mutual friends between the authenticated user and another user.
+Unfollow a user.
 
 - **Auth required:** Yes
 - **Response `200`:**
@@ -745,17 +773,24 @@ Get mutual friends between the authenticated user and another user.
 ```json
 {
   "success": true,
-  "data": {
-    "mutual_friends": [
-      { "id": "u_03BZ", "username": "janedoe", "avatar_url": "..." }
-    ],
-    "count": 1
-  },
+  "data": { "message": "Unfollowed successfully" },
   "error": null,
   "meta": null,
   "version": "1.0"
 }
 ```
+
+- **Common errors:** `409` (not following this user)
+
+---
+
+#### `GET /friends/{user_id}/posts` — See User Posts
+
+Get a paginated list of posts by a user.
+
+- **Auth required:** No
+- **Query params:** `limit` (default 20), `offset` (default 0)
+- **Response `200`:** Paginated list of post objects (see §6.4)
 
 ---
 
@@ -774,13 +809,10 @@ Create a new post.
 
 ```json
 {
-  "content": "Hello world! 🌍",
-  "visibility": "friends",
-  "media_ids": ["med_001", "med_002"]
+  "text": "Hello world!",
+  "image": "https://cdn.example.com/uploads/photo.jpg"
 }
 ```
-
-`visibility` values: `public`, `friends`, `only_me`
 
 - **Response `201`:**
 
@@ -789,15 +821,13 @@ Create a new post.
   "success": true,
   "data": {
     "id": "p_0A1B",
-    "author": { "id": "u_01HX", "username": "johndoe", "avatar_url": "..." },
-    "content": "Hello world! 🌍",
-    "visibility": "friends",
-    "media": [],
-    "reaction_counts": { "LIKE": 0, "LOVE": 0, "HAHA": 0, "WOW": 0, "SAD": 0, "ANGRY": 0 },
+    "author_id": "u_01HX",
+    "text": "Hello world!",
+    "image": "https://cdn.example.com/uploads/photo.jpg",
+    "like_count": 0,
     "comment_count": 0,
-    "share_count": 0,
-    "created_at": "2026-03-13T09:00:00Z",
-    "updated_at": "2026-03-13T09:00:00Z"
+    "is_published": true,
+    "created_at": "2026-03-13T09:00:00Z"
   },
   "error": null,
   "meta": null,
@@ -822,8 +852,8 @@ Get post detail. Cached for **120 seconds**.
 Edit a post. Owner only.
 
 - **Auth required:** Yes
-- **Request body:** `{ "content": "Updated text", "visibility": "public" }` (fields optional)
-- **Response `200`:** Updated post object
+- **Request body:** `{ "text": "Updated text", "image": "https://..." }`
+- **Response `200`:** Updated post object (same shape as create)
 - **Common errors:** `403`, `404`
 
 ---
@@ -852,7 +882,7 @@ List comments on a post.
 Add a comment to a post.
 
 - **Auth required:** Yes
-- **Request body:** `{ "content": "Great post!" }`
+- **Request body:** `{ "text": "Great post!" }`
 - **Response `201`:**
 
 ```json
@@ -861,8 +891,8 @@ Add a comment to a post.
   "data": {
     "id": "c_XY12",
     "post_id": "p_0A1B",
-    "author": { "id": "u_01HX", "username": "johndoe", "avatar_url": "..." },
-    "content": "Great post!",
+    "author_id": "u_01HX",
+    "text": "Great post!",
     "created_at": "2026-03-13T09:05:00Z"
   },
   "error": null,
@@ -882,7 +912,7 @@ Delete a comment. Owner or post owner only.
 
 ---
 
-#### `POST /posts/{post_id}/like` / `DELETE /posts/{post_id}/like`
+#### `POST /posts/{post_id}/likes` / `DELETE /posts/{post_id}/like`
 
 Add or remove a simple like on a post.
 
@@ -952,9 +982,9 @@ Upload media to attach to a post.
 
 ### 6.5 Feed
 
-#### `GET /feed`
+#### `GET /newsfeeds`
 
-Get the authenticated user's personalized feed.
+Get the authenticated user's personalized newsfeed.
 
 - **Auth required:** Yes
 - **Query params:** `page` (default 1), `limit` (default 20)

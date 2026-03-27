@@ -42,6 +42,7 @@ class SearchUsersUseCase:
         users = [
             UserSearchResult(
                 id=str(user.id),
+                user_name=str(user.user_name),
                 email=str(user.email),
                 display_name=user.display_name,
                 is_active=user.is_active,

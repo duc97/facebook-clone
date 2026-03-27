@@ -3,7 +3,7 @@ from __future__ import annotations
 from fb.application.auth.dtos import RegisterInput, TokenOutput
 from fb.application.shared.interfaces import UnitOfWork
 from fb.domain.auth.entities import User
-from fb.domain.auth.exceptions import EmailAlreadyExistsError
+from fb.domain.auth.exceptions import EmailAlreadyExistsError, UserNameAlreadyExistsError
 from fb.domain.auth.repository import UserRepository
 from fb.domain.auth.services import PasswordHasher, TokenService
 
@@ -29,12 +29,19 @@ class RegisterUseCase:
             if await self._user_repo.exists_by_email(input_data.email):
                 raise EmailAlreadyExistsError(input_data.email)
 
+            # Check if username already exists
+            if await self._user_repo.exists_by_user_name(input_data.user_name):
+                raise UserNameAlreadyExistsError(input_data.user_name)
+
             # Hash password and create user
             hashed = self._password_hasher.hash(input_data.password)
             user = User.create(
+                user_name=input_data.user_name,
                 email=input_data.email,
                 hashed_password=hashed,
-                display_name=input_data.display_name,
+                first_name=input_data.first_name,
+                last_name=input_data.last_name,
+                date_of_birth=input_data.birthday,
             )
 
             # Persist user

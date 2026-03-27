@@ -41,6 +41,28 @@ class HashedPassword:
 
 
 @dataclass(frozen=True, slots=True)
+class UserName:
+    """Username value object with validation."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self._is_valid(self.value):
+            raise ValueError(
+                f"Invalid username: {self.value}. "
+                "Must be 3-50 chars, alphanumeric/underscore/dot only."
+            )
+
+    @staticmethod
+    def _is_valid(username: str) -> bool:
+        pattern = r"^[a-zA-Z0-9_.]{3,50}$"
+        return bool(re.match(pattern, username))
+
+    def __str__(self) -> str:
+        return self.value
+
+
+@dataclass(frozen=True, slots=True)
 class TokenPair:
     """Access + Refresh token pair."""
 

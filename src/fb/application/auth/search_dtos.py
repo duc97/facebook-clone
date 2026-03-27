@@ -17,6 +17,7 @@ class UserSearchResult:
     """Single user result in a search response."""
 
     id: str
+    user_name: str
     email: str
     display_name: str
     is_active: bool

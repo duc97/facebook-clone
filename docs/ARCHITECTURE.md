@@ -2,6 +2,10 @@
 
 Facebook Clone Backend — Python 3.12 · FastAPI · SQLAlchemy 2.0 async · PostgreSQL · Redis · Strawberry GraphQL
 
+> **Social model:** Follow (unidirectional) — NOT friend requests.
+> **Auth:** Login via `user_name`, NOT email.
+> **API fields:** Post uses `text`/`image`, Comment uses `text`.
+
 ---
 
 ## Table of Contents

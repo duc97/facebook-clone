@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import Boolean, Date, DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,12 @@ class UserModel(Base):
         insert_default=uuid.uuid4,
         init=False,
     )
+    user_name: Mapped[str] = mapped_column(
+        String(50),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
     email: Mapped[str] = mapped_column(
         String(255),
         unique=True,
@@ -29,9 +35,23 @@ class UserModel(Base):
         String(255),
         nullable=False,
     )
+    first_name: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    last_name: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
     display_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
+    )
+    date_of_birth: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+        default=None,
+        init=False,
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean,

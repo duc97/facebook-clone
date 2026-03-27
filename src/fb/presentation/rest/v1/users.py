@@ -231,7 +231,8 @@ async def get_user_posts(
     offset: int = 0,
     container: Container = Depends(get_container),
 ):
-    """Get a paginated list of a user's posts."""
+    """Get a paginated list of a user's posts (kept for backwards compat,
+    canonical endpoint is GET /friends/{user_id}/posts)."""
     async with container.session_factory() as session:
         post_repo = SqlAlchemyPostRepository(session)
         use_case = GetPostUseCase(post_repo=post_repo)
@@ -247,8 +248,8 @@ async def get_user_posts(
         PostResponse(
             id=p.id,
             author_id=p.author_id,
-            content=p.content,
-            media_urls=p.media_urls,
+            text=p.content,
+            image=p.media_urls[0] if p.media_urls else None,
             like_count=p.like_count,
             comment_count=p.comment_count,
             is_published=p.is_published,

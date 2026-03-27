@@ -16,6 +16,7 @@ class UserSearchResultType:
     """GraphQL type for a single user search result."""
 
     id: strawberry.ID
+    user_name: str
     email: str
     display_name: str
     is_active: bool

@@ -4,7 +4,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fb.domain.auth.entities import User
-from fb.domain.auth.value_objects import Email, HashedPassword
+from fb.domain.auth.value_objects import Email, HashedPassword, UserName
 from fb.domain.shared.entity_id import EntityId
 from fb.domain.shared.pagination import CursorPage, PageInfo
 from fb.infrastructure.database.models.user import UserModel
@@ -22,7 +22,7 @@ class SqlAlchemyUserSearchRepository:
         limit: int = 20,
         offset: int = 0,
     ) -> CursorPage[User]:
-        """Search users by display_name or email (case-insensitive, partial match).
+        """Search users by display_name, user_name, or email (case-insensitive, partial match).
 
         Only returns active users, ordered by display_name ascending.
         """
@@ -31,6 +31,7 @@ class SqlAlchemyUserSearchRepository:
         filter_condition = (
             or_(
                 UserModel.display_name.ilike(search_pattern),
+                UserModel.user_name.ilike(search_pattern),
                 UserModel.email.ilike(search_pattern),
             )
             & (UserModel.is_active == True)  # noqa: E712
@@ -69,9 +70,13 @@ class SqlAlchemyUserSearchRepository:
     def _to_entity(model: UserModel) -> User:
         return User(
             id=EntityId(model.id),
+            user_name=UserName(model.user_name),
             email=Email(model.email),
             hashed_password=HashedPassword(model.hashed_password),
+            first_name=model.first_name,
+            last_name=model.last_name,
             display_name=model.display_name,
+            date_of_birth=model.date_of_birth,
             is_active=model.is_active,
             created_at=model.created_at,
             updated_at=model.updated_at,

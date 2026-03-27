@@ -227,11 +227,12 @@ async def create_post(
     async with uow:
         post_repo = SqlAlchemyPostRepository(uow.session)
         use_case = CreatePostUseCase(post_repo=post_repo, uow=uow)
+        media_urls = [body.image] if body.image else None
         result = await use_case.execute(
             CreatePostDTO(
                 author_id=current_user_id,
-                content=body.content,
-                media_urls=body.media_urls,
+                content=body.text,
+                media_urls=media_urls,
             )
         )
 
@@ -241,8 +242,8 @@ async def create_post(
         PostResponse(
             id=result.id,
             author_id=result.author_id,
-            content=result.content,
-            media_urls=result.media_urls,
+            text=result.content,
+            image=result.media_urls[0] if result.media_urls else None,
             like_count=result.like_count,
             comment_count=result.comment_count,
             is_published=result.is_published,
@@ -273,8 +274,8 @@ async def get_post(
     data = PostResponse(
         id=result.id,
         author_id=result.author_id,
-        content=result.content,
-        media_urls=result.media_urls,
+        text=result.content,
+        image=result.media_urls[0] if result.media_urls else None,
         like_count=result.like_count,
         comment_count=result.comment_count,
         is_published=result.is_published,
@@ -300,7 +301,7 @@ async def update_post(
             UpdatePostDTO(
                 post_id=post_id,
                 user_id=current_user_id,
-                content=body.content,
+                content=body.text,
             )
         )
 
@@ -311,8 +312,8 @@ async def update_post(
         PostResponse(
             id=result.id,
             author_id=result.author_id,
-            content=result.content,
-            media_urls=result.media_urls,
+            text=result.content,
+            image=result.media_urls[0] if result.media_urls else None,
             like_count=result.like_count,
             comment_count=result.comment_count,
             is_published=result.is_published,
@@ -363,7 +364,7 @@ async def get_comments(
             id=c.id,
             post_id=c.post_id,
             author_id=c.author_id,
-            content=c.content,
+            text=c.content,
             created_at=c.created_at,
         ).model_dump()
         for c in result.comments
@@ -396,7 +397,7 @@ async def create_comment(
             CreateCommentDTO(
                 post_id=post_id,
                 author_id=current_user_id,
-                content=body.content,
+                content=body.text,
             )
         )
 
@@ -407,7 +408,7 @@ async def create_comment(
             id=result.id,
             post_id=result.post_id,
             author_id=result.author_id,
-            content=result.content,
+            text=result.content,
             created_at=result.created_at,
         ).model_dump(),
         status_code=201,
@@ -439,7 +440,7 @@ async def delete_comment(
     return Response(status_code=204)
 
 
-@router.post("/posts/{post_id}/like", status_code=201)
+@router.post("/posts/{post_id}/likes", status_code=201)
 async def like_post(
     post_id: str,
     current_user_id: str = Depends(get_current_user_id),

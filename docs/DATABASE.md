@@ -1,6 +1,6 @@
 # Database Design
 
-Facebook Clone Backend — PostgreSQL 16 · SQLAlchemy 2.0 · Alembic migrations 001–006
+Facebook Clone Backend — PostgreSQL 16 · SQLAlchemy 2.0 · Alembic migrations 001–007
 
 ---
 
@@ -21,9 +21,13 @@ Facebook Clone Backend — PostgreSQL 16 · SQLAlchemy 2.0 · Alembic migrations
 ┌───────────────────────────────────────────────────────────────────────────────────┐
 │                               USERS (auth)                                        │
 │  PK  id              UUID        NOT NULL                                         │
+│      user_name       VARCHAR(50) NOT NULL  UNIQUE                                 │
 │      email           VARCHAR     NOT NULL  UNIQUE                                 │
 │      hashed_password VARCHAR     NOT NULL                                         │
-│      display_name    VARCHAR     NOT NULL                                         │
+│      first_name      VARCHAR(50) NOT NULL                                         │
+│      last_name       VARCHAR(50) NOT NULL                                         │
+│      display_name    VARCHAR     NOT NULL  (auto: first_name + last_name)         │
+│      date_of_birth   DATE        NULLABLE                                         │
 │      is_active       BOOLEAN     DEFAULT TRUE                                     │
 │      created_at      TIMESTAMPTZ NOT NULL                                         │
 │      updated_at      TIMESTAMPTZ NOT NULL                                         │
@@ -60,20 +64,23 @@ Facebook Clone Backend — PostgreSQL 16 · SQLAlchemy 2.0 · Alembic migrations
         └───────────────┘                 └──────────────┘
 
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│  FRIEND REQUEST STATE MACHINE          BIDIRECTIONAL FRIENDSHIP                   │
+│  FOLLOW MODEL (unidirectional)         LEGACY: FRIEND REQUESTS (unused)           │
 │                                                                                   │
-│  ┌──────────────────────────────┐      ┌──────────────────────────┐               │
-│  │ FRIEND_REQUESTS              │      │ FRIENDSHIPS              │               │
-│  │ PK  id          UUID         │      │ PK id          UUID      │               │
-│  │ FK  sender_id   UUID → users │      │ FK user_id     UUID      │               │
-│  │ FK  receiver_id UUID → users │      │ FK friend_id   UUID      │               │
-│  │     status  pending/         │      │    created_at            │               │
-│  │             accepted/        │      │ UQ(user_id, friend_id)   │               │
-│  │             rejected         │      └──────────────────────────┘               │
-│  │     created_at               │      NOTE: One request → two rows               │
-│  │     updated_at               │      (A→B) and (B→A) for                        │
-│  │ UQ(sender_id, receiver_id)   │      bidirectional lookup                       │
-│  └──────────────────────────────┘                                                 │
+│  ┌──────────────────────────────┐      ┌──────────────────────────────┐           │
+│  │ FOLLOWS (migration 007)      │      │ FRIEND_REQUESTS (legacy)     │           │
+│  │ PK id           UUID         │      │ PK  id          UUID         │           │
+│  │ FK follower_id  UUID → users │      │ FK  sender_id   UUID → users │           │
+│  │ FK following_id UUID → users │      │ FK  receiver_id UUID → users │           │
+│  │    created_at                │      │     status      VARCHAR      │           │
+│  │ UQ(follower_id, following_id)│      │ UQ(sender_id, receiver_id)   │           │
+│  └──────────────────────────────┘      └──────────────────────────────┘           │
+│  NOTE: A follows B ≠ B follows A       ┌──────────────────────────┐               │
+│  (unidirectional, like Twitter)         │ FRIENDSHIPS (legacy)     │               │
+│                                         │ PK id          UUID      │               │
+│                                         │ FK user_id     UUID      │               │
+│                                         │ FK friend_id   UUID      │               │
+│                                         │ UQ(user_id, friend_id)   │               │
+│                                         └──────────────────────────┘               │
 └───────────────────────────────────────────────────────────────────────────────────┘
 
 ┌───────────────────────────────────────────────────────────────────────────────────┐

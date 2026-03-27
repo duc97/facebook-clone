@@ -17,7 +17,7 @@ from fb.presentation.rest.v1.schemas import FeedPostResponse, FeedResponse
 router = APIRouter(tags=["feed"])
 
 
-@router.get("/feed")
+@router.get("/newsfeeds")
 async def get_feed(
     mode: str = "ranked",
     limit: int = 20,
@@ -77,8 +77,8 @@ async def get_feed(
             FeedPostResponse(
                 id=p.id,
                 author_id=p.author_id,
-                content=p.content,
-                media_urls=p.media_urls,
+                text=p.content,
+                image=p.media_urls[0] if p.media_urls else None,
                 like_count=p.like_count,
                 comment_count=p.comment_count,
                 created_at=p.created_at,

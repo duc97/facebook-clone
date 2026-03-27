@@ -70,7 +70,10 @@ class Query:
             return None
         return UserType(
             id=strawberry.ID(str(user.id)),
+            user_name=str(user.user_name),
             email=str(user.email),
+            first_name=user.first_name,
+            last_name=user.last_name,
             display_name=user.display_name,
             is_active=user.is_active,
         )
@@ -200,6 +203,7 @@ class Query:
             users=[
                 UserSearchResultType(
                     id=strawberry.ID(u.id),
+                    user_name=u.user_name,
                     email=u.email,
                     display_name=u.display_name,
                     is_active=u.is_active,

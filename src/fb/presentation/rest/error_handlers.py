@@ -19,7 +19,13 @@ from fb.domain.auth.exceptions import (
     InvalidTokenError,
     TokenBlacklistedError,
     UserInactiveError,
+    UserNameAlreadyExistsError,
     UserNotFoundError,
+)
+from fb.domain.follow.exceptions import (
+    AlreadyFollowingError,
+    CannotFollowSelfError,
+    NotFollowingError,
 )
 from fb.domain.friend.exceptions import (
     AlreadyFriendsError,
@@ -92,7 +98,11 @@ _EXCEPTION_MAP: dict[type[Exception], tuple[int, str]] = {
     ProfileNotFoundError: (404, "PROFILE_NOT_FOUND"),
     CannotFriendSelfError: (400, "CANNOT_FRIEND_SELF"),
     CannotShareOwnPostError: (400, "CANNOT_SHARE_OWN_POST"),
+    CannotFollowSelfError: (400, "CANNOT_FOLLOW_SELF"),
     EmailAlreadyExistsError: (409, "EMAIL_ALREADY_EXISTS"),
+    UserNameAlreadyExistsError: (409, "USERNAME_ALREADY_EXISTS"),
+    AlreadyFollowingError: (409, "ALREADY_FOLLOWING"),
+    NotFollowingError: (409, "NOT_FOLLOWING"),
     AlreadyLikedError: (409, "ALREADY_LIKED"),
     AlreadyReactedError: (409, "ALREADY_REACTED"),
     AlreadySharedError: (409, "ALREADY_SHARED"),

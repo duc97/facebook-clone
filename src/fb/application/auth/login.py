@@ -7,7 +7,7 @@ from fb.domain.auth.services import PasswordHasher, TokenService
 
 
 class LoginUseCase:
-    """Authenticate user and return token pair."""
+    """Authenticate user by username and return token pair."""
 
     def __init__(
         self,
@@ -20,8 +20,8 @@ class LoginUseCase:
         self._token_service = token_service
 
     async def execute(self, input_data: LoginInput) -> TokenOutput:
-        # Find user by email
-        user = await self._user_repo.find_by_email(input_data.email)
+        # Find user by username
+        user = await self._user_repo.find_by_user_name(input_data.user_name)
         if user is None:
             raise InvalidCredentialsError()
 

@@ -24,6 +24,14 @@ class EmailAlreadyExistsError(AuthError):
         self.email = email
 
 
+class UserNameAlreadyExistsError(AuthError):
+    """Raised when username is already registered."""
+
+    def __init__(self, user_name: str) -> None:
+        super().__init__(f"Username already taken: {user_name}")
+        self.user_name = user_name
+
+
 class UserNotFoundError(AuthError):
     """Raised when user is not found."""
 
