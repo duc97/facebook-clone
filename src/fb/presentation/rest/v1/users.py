@@ -15,7 +15,7 @@ from fb.application.profile.update_profile import UpdateProfileUseCase
 from fb.application.profile.upload_avatar import UploadAvatarUseCase
 from fb.container import Container
 from fb.domain.shared.entity_id import EntityId
-from fb.infrastructure.repositories.friend_repo import SqlAlchemyFriendRepository
+from fb.infrastructure.repositories.follow_repo import SqlAlchemyFollowRepository
 from fb.infrastructure.repositories.post_repo import SqlAlchemyPostRepository
 from fb.infrastructure.repositories.profile_repo import SqlAlchemyProfileRepository
 from fb.infrastructure.repositories.user_repo import SqlAlchemyUserRepository
@@ -201,13 +201,12 @@ async def get_user_friends(
     offset: int = 0,
     container: Container = Depends(get_container),
 ):
-    """Get a paginated list of a user's friends."""
+    """Get a paginated list of users this user is following."""
     async with container.session_factory() as session:
-        friend_repo = SqlAlchemyFriendRepository(session)
+        follow_repo = SqlAlchemyFollowRepository(session)
         uid = EntityId.from_str(user_id)
-        friend_ids, total = await friend_repo.get_friends_with_count(
-            uid, limit=limit, offset=offset
-        )
+        friend_ids = await follow_repo.get_following(uid, limit=limit, offset=offset)
+        total = await follow_repo.get_following_count(uid)
 
     response = FriendListResponse(
         friend_ids=[str(fid) for fid in friend_ids],

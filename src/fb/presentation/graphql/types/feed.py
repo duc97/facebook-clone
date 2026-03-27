@@ -9,8 +9,8 @@ class FeedPostType:
 
     id: strawberry.ID
     author_id: str
-    content: str
-    media_urls: list[str]
+    text: str
+    image: str | None = None
     like_count: int
     comment_count: int
     created_at: str | None = None

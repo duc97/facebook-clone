@@ -8,7 +8,7 @@ class CommentType:
     id: strawberry.ID
     post_id: str
     author_id: str
-    content: str
+    text: str
     created_at: str | None = None
 
 

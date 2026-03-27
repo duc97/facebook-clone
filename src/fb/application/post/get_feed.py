@@ -10,7 +10,7 @@ from fb.application.post.feed_dtos import (
     GetFeedInput,
     GetRankedFeedInput,
 )
-from fb.domain.friend.repository import FriendRepository
+from fb.domain.follow.repository import FollowRepository
 from fb.domain.post.affinity import AffinityCalculator, InteractionHistoryProvider
 from fb.domain.post.entities import Post
 from fb.domain.post.feed_cache_service import FeedCacheService
@@ -29,12 +29,12 @@ class GetFeedUseCase:
     def __init__(
         self,
         feed_repo: FeedRepo,
-        friend_repo: FriendRepository,
+        follow_repo: FollowRepository,
         feed_cache: FeedCacheService | None = None,
         interaction_history: InteractionHistoryProvider | None = None,
     ) -> None:
         self._feed_repo = feed_repo
-        self._friend_repo = friend_repo
+        self._follow_repo = follow_repo
         self._feed_cache = feed_cache
         self._interaction_history = interaction_history
         self._scorer = FeedScorer()
@@ -47,7 +47,7 @@ class GetFeedUseCase:
         offset = max(input_data.offset, 0)
 
         # Get user's friends
-        friend_ids = await self._friend_repo.get_friends(user_id, limit=1000)
+        friend_ids = await self._follow_repo.get_following(user_id, limit=1000)
 
         # Fetch limit+1 to detect has_next_page without a separate COUNT query
         post_ids = await self._feed_repo.get_feed_post_ids(
@@ -84,7 +84,7 @@ class GetFeedUseCase:
         limit = min(max(input_data.limit, 1), 50)
 
         # 1. Get user's friends
-        friend_ids = await self._friend_repo.get_friends(user_id, limit=1000)
+        friend_ids = await self._follow_repo.get_following(user_id, limit=1000)
 
         # 2. Fetch candidate pool (larger than final limit for better ranking)
         candidate_limit = limit * _CANDIDATE_MULTIPLIER
@@ -133,7 +133,7 @@ class GetFeedUseCase:
         first = min(max(input_data.first, 1), 50)
 
         # Get user's friends
-        friend_ids = await self._friend_repo.get_friends(user_id, limit=1000)
+        friend_ids = await self._follow_repo.get_following(user_id, limit=1000)
 
         # Get feed posts using cursor pagination
         cursor_page = await self._feed_repo.get_feed_posts_cursor(

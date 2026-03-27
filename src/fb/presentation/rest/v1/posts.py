@@ -192,20 +192,20 @@ async def _trigger_feed_fan_out(
     result: Any,
     author_id: str,
 ) -> None:
-    """Fire-and-forget: fan-out a newly created post to friends' cached feeds."""
+    """Fire-and-forget: fan-out a newly created post to followers' cached feeds."""
     try:
         async with container.session_factory() as session:
-            from fb.infrastructure.repositories.friend_repo import SqlAlchemyFriendRepository as _FriendRepo
+            from fb.infrastructure.repositories.follow_repo import SqlAlchemyFollowRepository as _FollowRepo
             from fb.domain.shared.entity_id import EntityId as _EId
-            friend_repo = _FriendRepo(session)
-            friend_ids_objs = await friend_repo.get_friends(_EId.from_str(author_id), limit=500)
-        friend_ids = [str(f) for f in friend_ids_objs]
+            follow_repo = _FollowRepo(session)
+            follower_ids_objs = await follow_repo.get_followers(_EId.from_str(author_id), limit=500)
+        friend_ids = [str(f) for f in follower_ids_objs]
 
         post_data = {
             "id": result.id,
             "author_id": result.author_id,
-            "content": result.content,
-            "media_urls": result.media_urls,
+            "text": result.content,
+            "image": result.media_urls[0] if result.media_urls else None,
             "like_count": result.like_count,
             "comment_count": result.comment_count,
             "created_at": result.created_at,

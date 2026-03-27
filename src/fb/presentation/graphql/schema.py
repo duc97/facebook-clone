@@ -8,6 +8,7 @@ from strawberry.fastapi import GraphQLRouter
 
 from fb.container import Container
 from fb.domain.shared.entity_id import EntityId
+from fb.infrastructure.repositories.follow_repo import SqlAlchemyFollowRepository
 from fb.infrastructure.repositories.friend_repo import SqlAlchemyFriendRepository
 from fb.infrastructure.repositories.profile_repo import SqlAlchemyProfileRepository
 from fb.infrastructure.repositories.user_repo import SqlAlchemyUserRepository
@@ -125,19 +126,21 @@ class Query:
         await container.cache.set_profile(uid_str, _profile_output_to_dict(result))
         return _profile_to_type(result)
 
-    # ── Friend ──
+    # ── Follow ──
     @strawberry.field
     async def friends(
         self, info: strawberry.types.Info, user_id: strawberry.ID
     ) -> FriendListType:
+        """Get list of users that user_id is following (follow model)."""
         ctx: GraphQLContext = info.context
         container = ctx.container
         async with container.session_factory() as session:
-            friend_repo = SqlAlchemyFriendRepository(session)
+            follow_repo = SqlAlchemyFollowRepository(session)
             uid = EntityId.from_str(str(user_id))
-            friend_ids, total_count = await friend_repo.get_friends_with_count(uid)
+            following_ids = await follow_repo.get_following(uid)
+            total_count = await follow_repo.get_following_count(uid)
         return FriendListType(
-            friend_ids=[str(fid) for fid in friend_ids],
+            friend_ids=[str(fid) for fid in following_ids],
             total_count=total_count,
         )
 
@@ -228,8 +231,8 @@ class Query:
         return PostType(
             id=strawberry.ID(str(result.id)),
             author_id=str(result.author_id),
-            content=result.content,
-            media_urls=list(result.media_urls),
+            text=result.content,
+            image=result.media_urls[0] if result.media_urls else None,
             like_count=result.like_count,
             comment_count=result.comment_count,
             is_published=result.is_published,
@@ -255,8 +258,8 @@ class Query:
             PostType(
                 id=strawberry.ID(r.id),
                 author_id=r.author_id,
-                content=r.content,
-                media_urls=r.media_urls,
+                text=r.content,
+                image=r.media_urls[0] if r.media_urls else None,
                 like_count=r.like_count,
                 comment_count=r.comment_count,
                 is_published=r.is_published,
@@ -281,8 +284,8 @@ class Query:
         container = ctx.container
         async with container.session_factory() as session:
             feed_repo = SqlAlchemyFeedRepository(session)
-            friend_repo = SqlAlchemyFriendRepository(session)
-            use_case = GetFeedUseCase(feed_repo=feed_repo, friend_repo=friend_repo)
+            follow_repo = SqlAlchemyFollowRepository(session)
+            use_case = GetFeedUseCase(feed_repo=feed_repo, follow_repo=follow_repo)
 
             # Use cursor if provided
             if first is not None or after is not None:
@@ -300,8 +303,8 @@ class Query:
                         FeedPostType(
                             id=strawberry.ID(p.id),
                             author_id=p.author_id,
-                            content=p.content,
-                            media_urls=p.media_urls,
+                            text=p.content,
+                            image=p.media_urls[0] if p.media_urls else None,
                             like_count=p.like_count,
                             comment_count=p.comment_count,
                             created_at=p.created_at,
@@ -329,8 +332,8 @@ class Query:
                 FeedPostType(
                     id=strawberry.ID(p.id),
                     author_id=p.author_id,
-                    content=p.content,
-                    media_urls=p.media_urls,
+                    text=p.content,
+                    image=p.media_urls[0] if p.media_urls else None,
                     like_count=p.like_count,
                     comment_count=p.comment_count,
                     created_at=p.created_at,
@@ -362,7 +365,7 @@ class Query:
                     id=strawberry.ID(c.id),
                     post_id=c.post_id,
                     author_id=c.author_id,
-                    content=c.content,
+                    text=c.content,
                     created_at=c.created_at,
                 )
                 for c in result.comments

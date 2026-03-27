@@ -9,7 +9,7 @@ from fb.application.post.get_feed import GetFeedUseCase
 from fb.container import Container
 from fb.infrastructure.cache.feed_cache import RedisFeedCache
 from fb.infrastructure.repositories.feed_repo import SqlAlchemyFeedRepository
-from fb.infrastructure.repositories.friend_repo import SqlAlchemyFriendRepository
+from fb.infrastructure.repositories.follow_repo import SqlAlchemyFollowRepository
 from fb.presentation.dependencies import get_container, get_current_user_id
 from fb.presentation.rest.response import success_response
 from fb.presentation.rest.v1.schemas import FeedPostResponse, FeedResponse
@@ -46,8 +46,8 @@ async def get_feed(
     # 2. DB fetch
     async with container.session_factory() as session:
         feed_repo = SqlAlchemyFeedRepository(session)
-        friend_repo = SqlAlchemyFriendRepository(session)
-        use_case = GetFeedUseCase(feed_repo=feed_repo, friend_repo=friend_repo)
+        follow_repo = SqlAlchemyFollowRepository(session)
+        use_case = GetFeedUseCase(feed_repo=feed_repo, follow_repo=follow_repo)
         result = await use_case.execute_ranked(
             GetRankedFeedInput(user_id=current_user_id, limit=limit, mode=mode)
         )
@@ -60,8 +60,8 @@ async def get_feed(
                 {
                     "id": p.id,
                     "author_id": p.author_id,
-                    "content": p.content,
-                    "media_urls": p.media_urls,
+                    "text": p.content,
+                    "image": p.media_urls[0] if p.media_urls else None,
                     "like_count": p.like_count,
                     "comment_count": p.comment_count,
                     "created_at": p.created_at,

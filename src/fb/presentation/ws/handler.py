@@ -151,22 +151,22 @@ async def _handle_seen(container: Container, sender_id: str, data: dict) -> None
 
 
 async def _broadcast_presence(container: Container, user_id: str, online: bool) -> None:
-    """Notify all friends of the user about their online/offline status."""
+    """Notify all followers of the user about their online/offline status."""
     from fb.domain.shared.entity_id import EntityId
-    from fb.infrastructure.repositories.friend_repo import SqlAlchemyFriendRepository
+    from fb.infrastructure.repositories.follow_repo import SqlAlchemyFollowRepository
 
     event_type = "user.online" if online else "user.offline"
     event = {"type": event_type, "data": {"user_id": user_id}}
 
     try:
         async with container.session_factory() as session:
-            friend_repo = SqlAlchemyFriendRepository(session)
-            # Fetch all friends without pagination (presence is time-sensitive)
-            friend_ids = await friend_repo.get_friends(
+            follow_repo = SqlAlchemyFollowRepository(session)
+            # Fetch all followers (people who follow this user) for presence broadcast
+            follower_ids = await follow_repo.get_followers(
                 EntityId.from_str(user_id), limit=5000, offset=0
             )
 
-        for friend_id in friend_ids:
-            await container.pubsub.publish(str(friend_id.value), event)
+        for follower_id in follower_ids:
+            await container.pubsub.publish(str(follower_id.value), event)
     except Exception:
         logger.exception("Failed to broadcast presence for user %s", user_id)
